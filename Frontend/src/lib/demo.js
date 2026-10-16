@@ -30,3 +30,14 @@ export const MERMAS_DEMO = [
   { id: 1, codigo: "CAC001", etapa: "Secado y selección", fecha: "2026-10-15", merma_pct: 20, alerta: true },
   { id: 2, codigo: "CAC003", etapa: "Limpieza", fecha: "2026-10-15", merma_pct: 10, alerta: false },
 ];
+
+export const PRODUCTORES_DEMO = [
+  { id: 1, nombre: "Productor Rivera", municipio: "Rivera" },
+  { id: 2, nombre: "Productor Campoalegre", municipio: "Campoalegre" },
+  { id: 3, nombre: "Productor Algeciras", municipio: "Algeciras" },
+];
+
+export const PRODUCTOS_DEMO = [
+  { id: 1, codigo: "PRD-001", nombre: "Cacao en grano seco" },
+  { id: 2, codigo: "PRD-002", nombre: "Nibs de cacao" },
+];

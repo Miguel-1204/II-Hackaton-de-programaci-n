@@ -1,4 +1,5 @@
 const ESTILOS = {
+  recibido: 'bg-cacao-100 text-cacao-800',
   pendiente: 'bg-mazorca-500/20 text-cacao-800',
   liberado: 'bg-green-100 text-green-900',
   bloqueado: 'bg-peligro-600/10 text-peligro-600',
