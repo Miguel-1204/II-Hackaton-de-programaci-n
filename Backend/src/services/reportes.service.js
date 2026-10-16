@@ -12,7 +12,7 @@ const PDFDocument = require('pdfkit')
  * @param {Object} dependencies.estadisticasModel - Modelo de estadísticas y vistas analíticas.
  * @returns {Object} Métodos de generación de reportes.
  */
-function createReportesService({ estadisticasModel, lotesModel }) {
+function createReportesService({ estadisticasModel, lotesModel, nlpService }) {
   if (!estadisticasModel) {
     throw new Error('estadisticasModel es una dependencia obligatoria')
   }
@@ -199,6 +199,118 @@ function createReportesService({ estadisticasModel, lotesModel }) {
           doc.fontSize(7).fillColor('#888888').font('Helvetica')
             .text('Este documento es un informe oficial emitido por la plataforma Kaotrace en cumplimiento de los estándares de trazabilidad agroindustrial de la Asociación Cacaotera del Huila. Todos los cálculos son verificables en PostgreSQL.', 40, bottomY, { width: 532, align: 'center' })
 
+          doc.end()
+        } catch (error) {
+          reject(error)
+        }
+      })
+    },
+
+    async generateBalanceProductosPdf(pregunta, metadata = {}) {
+      if (!nlpService) throw new Error('nlpService es requerido para generar el balance consultado')
+      const resultado = await nlpService.procesarConsulta(pregunta)
+      if (resultado.intencionDetectada !== 'CONSULTA_BALANCE_PRODUCTOS' || !resultado.datos) {
+        const error = new Error('La consulta no produjo un balance de productos exportable')
+        error.status = 400
+        throw error
+      }
+
+      const { productos, resumen } = resultado.datos
+      return new Promise((resolve, reject) => {
+        try {
+          const doc = new PDFDocument({
+            size: 'LETTER',
+            margin: 40,
+            info: {
+              Title: 'Kaotrace - Balance general de productos',
+              Author: 'Asociación Cacaotera del Huila - Kaotrace',
+              Subject: 'Balance de inventario por producto',
+            },
+          })
+          const chunks = []
+          doc.on('data', (chunk) => chunks.push(chunk))
+          doc.on('end', () => resolve(Buffer.concat(chunks)))
+          doc.on('error', reject)
+
+          doc.rect(40, 40, 532, 54).fill('#2c1810')
+          doc.fillColor('#ffffff').fontSize(15).font('Helvetica-Bold')
+            .text('ASOCIACIÓN CACAOTERA DEL HUILA - KAOTRACE', 50, 52)
+          doc.fontSize(9).font('Helvetica')
+            .text('Balance general de inventario por producto', 50, 74)
+
+          doc.fillColor('#2c1810').fontSize(16).font('Helvetica-Bold')
+            .text('BALANCE GENERAL DE PRODUCTOS', 40, 112)
+          doc.fillColor('#444444').fontSize(9).font('Helvetica')
+            .text(`Emitido: ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}`)
+            .text(`Solicitado por: ${metadata.solicitante || 'Administrador'}`)
+            .text(`Consulta: ${pregunta}`)
+
+          const summaryY = 170
+          doc.rect(40, summaryY, 532, 54).fillAndStroke('#f7f4ef', '#d4c7b8')
+          doc.fillColor('#2c1810').fontSize(9).font('Helvetica-Bold')
+            .text(`Productos: ${resumen.totalProductos}`, 50, summaryY + 10)
+            .text(`Lotes: ${resumen.totalLotes}`, 180, summaryY + 10)
+            .text(`Registrado: ${Number(resumen.cantidadRegistradaKg).toLocaleString('es-CO')} kg`, 285, summaryY + 10)
+            .text(`Disponible: ${Number(resumen.disponibleKg).toLocaleString('es-CO')} kg`, 430, summaryY + 10)
+          doc.font('Helvetica').fontSize(8).fillColor('#555555')
+            .text(`Salidas registradas: ${Number(resumen.consumidoKg).toLocaleString('es-CO')} kg`, 50, summaryY + 32)
+
+          let y = 245
+          doc.fillColor('#2c1810').fontSize(11).font('Helvetica-Bold')
+            .text('Disponible por producto', 40, y)
+          y += 20
+          const maxDisponible = Math.max(...productos.map((item) => Number(item.disponibleKg || 0)), 0)
+          for (const item of productos) {
+            if (y > 680) {
+              doc.addPage()
+              y = 45
+            }
+            const value = Number(item.disponibleKg || 0)
+            doc.font('Helvetica').fontSize(8).fillColor('#333333')
+              .text(String(item.producto).slice(0, 32), 42, y, { width: 145 })
+            doc.rect(190, y + 1, 270, 9).fill('#eee6dd')
+            if (maxDisponible > 0 && value > 0) {
+              doc.rect(190, y + 1, Math.max((value / maxDisponible) * 270, 2), 9).fill('#07805d')
+            }
+            doc.text(`${value.toLocaleString('es-CO')} kg`, 470, y, { width: 90, align: 'right' })
+            y += 18
+          }
+
+          y += 14
+          if (y > 665) {
+            doc.addPage()
+            y = 45
+          }
+          doc.fillColor('#2c1810').fontSize(11).font('Helvetica-Bold')
+            .text('Detalle de inventario', 40, y)
+          y += 18
+          doc.rect(40, y, 532, 20).fill('#5a3825')
+          doc.fillColor('#ffffff').fontSize(7).font('Helvetica-Bold')
+            .text('PRODUCTO', 45, y + 6, { width: 130 })
+            .text('LOTES', 180, y + 6, { width: 40, align: 'right' })
+            .text('REGISTRADO (kg)', 225, y + 6, { width: 80, align: 'right' })
+            .text('SALIDAS (kg)', 310, y + 6, { width: 75, align: 'right' })
+            .text('DISPONIBLE (kg)', 390, y + 6, { width: 85, align: 'right' })
+            .text('PRECIO REF.', 480, y + 6, { width: 85, align: 'right' })
+          y += 20
+          productos.forEach((item, index) => {
+            if (y > 700) {
+              doc.addPage()
+              y = 45
+            }
+            if (index % 2 === 0) doc.rect(40, y, 532, 18).fill('#faf8f5')
+            doc.fillColor('#222222').font('Helvetica').fontSize(7)
+              .text(String(item.producto).slice(0, 24), 45, y + 5, { width: 130 })
+              .text(String(item.lotes), 180, y + 5, { width: 40, align: 'right' })
+              .text(Number(item.cantidadRegistradaKg).toLocaleString('es-CO'), 225, y + 5, { width: 80, align: 'right' })
+              .text(Number(item.consumidoKg).toLocaleString('es-CO'), 310, y + 5, { width: 75, align: 'right' })
+              .text(Number(item.disponibleKg).toLocaleString('es-CO'), 390, y + 5, { width: 85, align: 'right' })
+              .text(item.precioReferencia == null ? 'No registrado' : `${Number(item.precioReferencia).toLocaleString('es-CO')} / ${item.unidadComercial || 'unidad'}`, 480, y + 5, { width: 85, align: 'right' })
+            y += 18
+          })
+
+          doc.fontSize(7).fillColor('#666666').font('Helvetica')
+            .text('El saldo disponible suma lotes evaluables en estado PENDIENTE o LIBERADO. Los lotes bloqueados y saldos no evaluables se excluyen. Las salidas consideran movimientos convertibles a kg. El precio de referencia se presenta como dato de catálogo y no se usa para valorizar inventario.', 40, 730, { width: 532, align: 'center' })
           doc.end()
         } catch (error) {
           reject(error)

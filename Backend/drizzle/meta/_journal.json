@@ -15,6 +15,34 @@
       "when": 1792125461539,
       "tag": "0001_jazzy_sentinel",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792152645149,
+      "tag": "0002_furry_stark_industries",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792158849126,
+      "tag": "0003_product_image",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792162449126,
+      "tag": "0004_real_product_photos",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792166049126,
+      "tag": "0005_manteca_imagen_oficial",
+      "breakpoints": true
     }
   ]
 }

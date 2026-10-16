@@ -13,6 +13,7 @@
     "seed:roles": "node scripts/db/seed-roles.js",
     "seed:admin": "node scripts/db/seed-admin.js",
     "seed:demo": "node scripts/db/seed-demo.js",
+    "seed:prueba13": "node scripts/db/seed-prueba13.js",
     "test:analytics": "node scripts/db/analytics.integration.js",
     "test:inventory": "node scripts/db/inventory.integration.js",
     "test:traceability": "node scripts/db/traceability.performance.js"

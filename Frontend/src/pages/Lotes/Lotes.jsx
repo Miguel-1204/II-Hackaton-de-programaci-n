@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from 'react'
 import BadgeEstado from '../../component/BadgeEstado'
 import ModalDetalleLote from './ModalDetalleLote'
 import {
-  LOTES_INICIALES,
   MUNICIPIOS_HUILA,
   obtenerLotes
 } from '../../services/lotesService'
@@ -16,7 +15,7 @@ const formatKg = (n) => `${Number(n ?? 0).toLocaleString('es-CO')} kg`
  * Cumple: RF08 (Cálculo inventario), RF11 (Filtros y Exportación CSV)
  */
 export default function Lotes() {
-  const [lotes, setLotes] = useState(LOTES_INICIALES)
+  const [lotes, setLotes] = useState([])
   const [cargando, setCargando] = useState(true)
   const [mensajeToast, setMensajeToast] = useState(null)
 
@@ -35,10 +34,10 @@ export default function Lotes() {
       setCargando(true)
       try {
         const datos = await obtenerLotes()
-        if (montado) setLotes(datos && datos.length > 0 ? datos : LOTES_INICIALES)
+        if (montado) setLotes(datos)
       } catch (e) {
         console.error('Error al cargar lotes:', e)
-        if (montado) setLotes(LOTES_INICIALES)
+        if (montado) setLotes([])
       } finally {
         if (montado) setCargando(false)
       }
@@ -139,7 +138,7 @@ export default function Lotes() {
       {mensajeToast && (
         <div
           role="status"
-          className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl shadow-2xl border text-sm flex items-center gap-3 toast-enter ${
+          className={`fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 z-50 px-4 py-3 rounded-xl shadow-2xl border text-sm flex items-center gap-3 toast-enter ${
             mensajeToast.tipo === 'error'
               ? 'bg-red-50 text-peligro-600 border-red-300'
               : 'bg-cacao-900 text-cacao-50 border-cacao-700'
@@ -177,7 +176,7 @@ export default function Lotes() {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pt-1">
           {/* Búsqueda por texto */}
           <div>
             <label htmlFor="busqueda-lote" className="block text-[11px] font-bold text-cacao-800 uppercase tracking-wide mb-1.5">
@@ -414,7 +413,7 @@ export default function Lotes() {
                     </div>
 
                     {/* Inventario RF08 */}
-                    <div className="grid grid-cols-3 gap-2 bg-[#FDF8F5] p-2.5 rounded-lg border border-cacao-100 text-center text-xs">
+                    <div className="grid grid-cols-1 min-[420px]:grid-cols-3 gap-2 bg-[#FDF8F5] p-2.5 rounded-lg border border-cacao-100 text-center text-xs">
                       <div>
                         <span className="text-[10px] text-cacao-500 block">Recibido</span>
                         <span className="font-bold text-cacao-900">{formatKg(lote.cantidad_recibida)}</span>

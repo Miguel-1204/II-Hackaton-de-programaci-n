@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { obtenerLotes, LOTES_INICIALES } from '../../services/lotesService'
-import { obtenerAlertasAdmin, MOVIMIENTOS_RECIENTES } from '../../services/adminService'
+import { obtenerAlertasPersistidas, MOVIMIENTOS_RECIENTES } from '../../services/adminService'
+import { aKg } from '../../utils/merma'
 import { IconAlert, IconRobot, IconInbox, IconGear, IconSparkle, IconMoney, IconPackage, IconClipboard, IconPin } from '../../component/Icons'
 
 const formatKg = (n) => `${Number(n ?? 0).toLocaleString('es-CO')} kg`
@@ -13,24 +14,22 @@ export default function InicioAdmin() {
   const [lotes, setLotes] = useState(LOTES_INICIALES)
   const [alertas, setAlertas] = useState([])
   const [cargando, setCargando] = useState(true)
+  const [errorAlertas, setErrorAlertas] = useState('')
 
   useEffect(() => {
     let montado = true
     async function cargar() {
       try {
-        const [lotesData, alertasData] = await Promise.all([
+        const [lotesResult, alertasResult] = await Promise.allSettled([
           obtenerLotes(),
-          Promise.resolve(obtenerAlertasAdmin())
+          obtenerAlertasPersistidas(),
         ])
-        if (montado) {
-          setLotes(lotesData && lotesData.length > 0 ? lotesData : LOTES_INICIALES)
-          setAlertas(alertasData)
-        }
+        if (!montado) return
+        if (lotesResult.status === 'fulfilled') setLotes(lotesResult.value || LOTES_INICIALES)
+        if (alertasResult.status === 'fulfilled') setAlertas(alertasResult.value)
+        else setErrorAlertas('No se pudieron cargar las alertas desde el servidor.')
       } catch {
-        if (montado) {
-          setLotes(LOTES_INICIALES)
-          setAlertas(obtenerAlertasAdmin())
-        }
+        if (montado) setErrorAlertas('No se pudieron cargar los indicadores del servidor.')
       } finally {
         if (montado) setCargando(false)
       }
@@ -43,14 +42,16 @@ export default function InicioAdmin() {
 
   // Métricas de inventario RF08 y economía RF05
   const metricas = useMemo(() => {
-    const totalRecibido = lotes.reduce((acc, l) => acc + Number(l.cantidad_recibida ?? 0), 0)
+    const totalRecibido = lotes
+      .filter((l) => !l.creado_por_transformacion)
+      .reduce((acc, l) => acc + (aKg(l.cantidad_recibida, l.unidad) ?? 0), 0)
     const totalConsumido = lotes.reduce((acc, l) => acc + Number(l.cantidad_consumida ?? 0), 0)
     const totalDisponible = lotes.reduce((acc, l) => acc + Number(l.cantidad_disponible ?? 0), 0)
-    const valorizacionTotal = lotes.reduce(
-      (acc, l) => acc + Number(l.cantidad_disponible ?? 0) * Number(l.costo_unitario ?? 0),
-      0
-    )
-    const alertasCriticas = alertas.filter((a) => a.severidad === 'alta' || a.tipo === 'Merma').length
+    const tieneCostos = lotes.some((l) => Number.isFinite(Number(l.costo_unitario)) && Number(l.costo_unitario) > 0)
+    const valorizacionTotal = tieneCostos
+      ? lotes.reduce((acc, l) => acc + Number(l.cantidad_disponible ?? 0) * Number(l.costo_unitario ?? 0), 0)
+      : null
+    const alertasCriticas = alertas.filter((a) => ['alta', 'critica', 'crítica'].includes(String(a.severidad).toLowerCase())).length
 
     return {
       totalRecibido,
@@ -82,7 +83,7 @@ export default function InicioAdmin() {
       {/* Encabezado Principal */}
       <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b border-cacao-200">
         <div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
             <h1 className="font-display text-2xl md:text-3xl font-bold text-cacao-950 tracking-tight">
               Control General de Trazabilidad y Calidad
             </h1>
@@ -95,10 +96,10 @@ export default function InicioAdmin() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row items-stretch gap-2 w-full md:w-auto">
           <Link
             to="/admin/alertas"
-            className="px-3.5 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-peligro-600 border border-red-200 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs"
+            className="px-3.5 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-peligro-600 border border-red-200 text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-2xs"
           >
             <IconAlert className="w-4 h-4" />
             <span>{metricas.alertasCriticas} Alertas Pendientes</span>
@@ -106,7 +107,7 @@ export default function InicioAdmin() {
           <button
             type="button"
             onClick={() => window.dispatchEvent(new CustomEvent('abrir-consultas-nlp'))}
-            className="px-3.5 py-2 rounded-xl bg-cacao-800 hover:bg-cacao-900 text-white text-xs font-semibold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+            className="px-3.5 py-2 rounded-xl bg-cacao-800 hover:bg-cacao-900 text-white text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
           >
             <IconRobot className="w-4 h-4" />
             <span>Consultas Inteligentes</span>
@@ -164,7 +165,9 @@ export default function InicioAdmin() {
           <p className="mt-2 text-2xl font-bold text-peligro-600">
             {cargando ? '...' : metricas.alertasCriticas}
           </p>
-          <span className="text-[11px] text-red-700 underline font-medium">Revisar detalles →</span>
+          <span className="text-[11px] text-red-700 underline font-medium">
+            {errorAlertas || 'Revisar alertas críticas abiertas →'}
+          </span>
         </Link>
 
         {/* Valorización Inventario (RF05) */}
@@ -174,9 +177,11 @@ export default function InicioAdmin() {
             <IconMoney className="w-4 h-4" />
           </div>
           <p className="mt-2 text-xl font-black text-amber-950">
-            {cargando ? '...' : formatCop(metricas.valorizacionTotal)}
+            {cargando ? '...' : metricas.valorizacionTotal === null ? 'N/D' : formatCop(metricas.valorizacionTotal)}
           </p>
-          <span className="text-[11px] text-amber-800">Costo base en almacén</span>
+          <span className="text-[11px] text-amber-800">
+            {metricas.valorizacionTotal === null ? 'No hay costos unitarios registrados' : 'Costo base en almacén'}
+          </span>
         </div>
       </section>
 

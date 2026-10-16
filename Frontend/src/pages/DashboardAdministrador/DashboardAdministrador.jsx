@@ -62,7 +62,7 @@ export default function DashboardAdministrador() {
 
       {/* Sidebar Lateral */}
       <aside
-        className={`fixed md:sticky top-0 bottom-0 left-0 z-40 w-64 bg-[#2C1A14] text-cacao-50 flex flex-col justify-between transition-transform duration-200 ease-in-out md:translate-x-0 ${
+        className={`fixed md:sticky top-0 bottom-0 left-0 z-40 w-64 md:h-screen md:h-dvh overflow-y-auto bg-[#2C1A14] text-cacao-50 flex flex-col justify-between transition-transform duration-200 ease-in-out md:translate-x-0 ${
           menuAbierto ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         } shadow-xl border-r border-[#3D251D]`}
       >
@@ -141,12 +141,12 @@ export default function DashboardAdministrador() {
       <button
         type="button"
         onClick={() => setModalConsultasAbierto(true)}
-        className="fixed right-0 top-1/2 -translate-y-1/2 z-40 bg-[#2C1A14] hover:bg-cacao-800 text-mazorca-400 hover:text-white border-l-2 border-y-2 border-mazorca-500/80 rounded-l-2xl py-3.5 px-2.5 shadow-2xl flex flex-col items-center gap-2 cursor-pointer transition-all duration-200 hover:-translate-x-1 group"
+        className="fixed right-4 bottom-5 md:right-0 md:bottom-auto md:top-1/2 md:-translate-y-1/2 z-30 bg-[#2C1A14] hover:bg-cacao-800 text-mazorca-400 hover:text-white border border-mazorca-500/80 rounded-full md:rounded-l-2xl md:rounded-r-none py-3 px-3 md:py-3.5 md:px-2.5 shadow-2xl flex flex-row md:flex-col items-center gap-2 cursor-pointer transition-all duration-200 md:hover:-translate-x-1 group"
         title="Abrir motor de Consultas Inteligentes NLP"
         aria-label="Abrir consultas inteligentes en lenguaje natural"
       >
         <IconRobot className="w-5 h-5 group-hover:scale-125 transition-transform" />
-        <span className="text-[10px] font-bold uppercase tracking-widest text-cacao-100 [writing-mode:vertical-rl] rotate-180">
+        <span className="hidden md:block text-[10px] font-bold uppercase tracking-widest text-cacao-100 [writing-mode:vertical-rl] rotate-180">
           Consultas NLP
         </span>
         <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />

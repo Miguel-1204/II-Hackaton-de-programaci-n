@@ -1,4 +1,5 @@
 // Servicio y almacenamiento mock de datos para el Panel de Administrador de Cacao del Huila
+import { api } from './api'
 
 export const AUDITORIA_INICIAL = [
   {
@@ -169,6 +170,26 @@ export function obtenerAlertasAdmin() {
     }
   }
   return ALERTAS_INICIALES
+}
+
+export async function obtenerAlertasPersistidas() {
+  const { incidencias = [] } = await api('/incidencias?estado=ABIERTA')
+  return incidencias.map((item) => {
+    const esMerma = item.tipo === 'MERMA_EXCESIVA'
+    const fecha = item.creadaEn ? new Date(item.creadaEn).toLocaleString('es-CO') : 'Sin fecha'
+    return {
+      id: item.id,
+      tipo: esMerma ? 'Merma' : item.tipo,
+      severidad: String(item.severidad || '').toLowerCase(),
+      lote: item.loteCodigo || `Lote ${item.loteId}`,
+      etapa: item.transformacionCodigo || 'Incidencia operativa',
+      regla: esMerma ? 'Merma superior al 15 %' : `Incidencia ${item.tipo}`,
+      valor_registrado: esMerma ? 'Supera el umbral' : item.severidad,
+      causa: item.descripcion,
+      fecha,
+      estado_lote: '',
+    }
+  })
 }
 
 // Exportador genérico a CSV con UTF-8 y BOM

@@ -276,6 +276,7 @@ function createLotesModel(db) {
               cantidadRecibida: data.cantidad,
               unidad: data.unidad,
               tipoMaterial: data.tipoMaterial,
+              estado: 'PENDIENTE',
             })
             .returning()
 
@@ -385,6 +386,11 @@ function createLotesModel(db) {
           ail.saldo_inventario_kg,
           ail.estado_evaluacion,
           ael.bloqueado,
+          EXISTS (
+            SELECT 1
+            FROM transformacion_lotes tl
+            WHERE tl.lote_id = l.id AND tl.tipo_participacion = 'SALIDA'
+          ) AS creado_por_transformacion,
           COALESCE(salidas.cantidad_salida_kg, 0) AS cantidad_salida_kg
         FROM lotes l
         JOIN productores p ON p.id = l.productor_id
@@ -418,6 +424,7 @@ function createLotesModel(db) {
           unidad: row.unidad,
           tipoMaterial: row.tipo_material,
           estado: row.estado,
+          creadoPorTransformacion: Boolean(row.creado_por_transformacion),
           cantidadDisponibleKg: row.saldo_inventario_kg === null
             ? null
             : Number(row.saldo_inventario_kg),

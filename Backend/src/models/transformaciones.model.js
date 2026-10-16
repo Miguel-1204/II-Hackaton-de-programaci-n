@@ -10,6 +10,7 @@ const {
   costosTransformacion,
   incidencias,
   auditoriaEventos,
+  lotes,
 } = require('../db/schema')
 const { lockAndValidateInventory } = require('./lotes.model')
 
@@ -156,7 +157,7 @@ function createTransformacionesModel(db) {
         return await db.transaction(async (tx) => {
         await lockAndValidateInventory(tx, {
           consumptions: data.lotesEntrada,
-          lotIds: data.lotesSalida.map(({ loteId }) => loteId),
+          lotIds: data.lotesSalida.filter(({ loteId }) => loteId).map(({ loteId }) => loteId),
         })
 
         // 1. Inserción de la transformación
@@ -195,24 +196,54 @@ function createTransformacionesModel(db) {
           })
         }
 
+        // Las salidas nuevas heredan productor y clasificación del lote de entrada.
+        const inputsInfo = await tx.execute(sql`
+          SELECT DISTINCT productor_id, producto_id, tipo_material
+          FROM lotes
+          WHERE id IN (${sql.join(data.lotesEntrada.map(({ loteId }) => sql`${loteId}`), sql`, `)})
+        `)
+        const productoresOrigen = new Set(inputsInfo.map((row) => Number(row.productor_id)))
+        if (data.lotesSalida.some(({ loteId }) => !loteId) && productoresOrigen.size !== 1) {
+          const error = new Error('Para crear lotes de salida, todas las entradas deben pertenecer al mismo productor.')
+          error.statusCode = 409
+          throw error
+        }
+        const origen = inputsInfo[0]
+        const lotesSalidaCreados = []
+
         // 3. Inserción de participaciones de SALIDA y movimientos de inventario de ENTRADA
-        for (const output of data.lotesSalida) {
+        for (const [index, output] of data.lotesSalida.entries()) {
+          let outputLotId = output.loteId
+          if (!outputLotId) {
+            const codigoSalida = `${data.codigo}-OUT-${String(index + 1).padStart(2, '0')}`
+            const [newLot] = await tx.insert(lotes).values({
+              codigo: codigoSalida,
+              productorId: origen.productor_id,
+              productoId: origen.producto_id,
+              tipoMaterial: origen.tipo_material,
+              cantidadRecibida: output.cantidad,
+              unidad: output.unidad,
+              estado: 'PENDIENTE',
+            }).returning({ id: lotes.id })
+            outputLotId = newLot.id
+            lotesSalidaCreados.push({ id: outputLotId, codigo: codigoSalida })
+          }
           await tx.insert(transformacionLotes).values({
             transformacionId: trans.id,
-            loteId: output.loteId,
+            loteId: outputLotId,
             tipoParticipacion: 'SALIDA',
             cantidad: output.cantidad,
             unidad: output.unidad,
           })
 
           await tx.insert(movimientosInventario).values({
-            loteId: output.loteId,
+            loteId: outputLotId,
             transformacionId: trans.id,
             usuarioId: data.responsableId,
             tipoMovimiento: 'ENTRADA',
             cantidad: output.cantidad,
             unidad: output.unidad,
-            claveIdempotencia: `${baseKey}_mov_entrada_lote_${output.loteId}`,
+            claveIdempotencia: `${baseKey}_mov_entrada_lote_${outputLotId}`,
           })
         }
 
@@ -243,8 +274,9 @@ function createTransformacionesModel(db) {
               cantidad,
               unidad,
             })),
-            lotesSalida: data.lotesSalida.map(({ loteId, cantidad, unidad }) => ({
-              loteId,
+            lotesSalida: data.lotesSalida.map(({ loteId, cantidad, unidad }, index) => ({
+              loteId: loteId || null,
+              codigo: loteId ? null : `${data.codigo}-OUT-${String(index + 1).padStart(2, '0')}`,
               cantidad,
               unidad,
             })),
@@ -293,6 +325,7 @@ function createTransformacionesModel(db) {
 
         return {
           transformacion: trans,
+          lotesSalidaCreados,
           merma: merma || null,
           alertaGenerada,
         }

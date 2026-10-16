@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react'
-import { LOTES_INICIALES } from '../../services/lotesService'
+import { useState, useMemo, useEffect } from 'react'
+import { obtenerLotes } from '../../services/lotesService'
 import { IconCacao, IconGear, IconChart, IconFormula, IconAlert, IconCheck } from '../../component/Icons'
 
 const formatCop = (n) => {
@@ -9,11 +9,19 @@ const formatCop = (n) => {
 
 export default function Economia() {
   // Lote seleccionado para simular
-  const [loteIdSeleccionado, setLoteIdSeleccionado] = useState(LOTES_INICIALES[0].id)
+  const [lotes, setLotes] = useState([])
+  const [loteIdSeleccionado, setLoteIdSeleccionado] = useState('')
+
+  useEffect(() => {
+    obtenerLotes().then((lista) => {
+      setLotes(lista)
+      if (lista.length) setLoteIdSeleccionado(String(lista[0].id))
+    }).catch(() => setLotes([]))
+  }, [])
 
   const loteSeleccionado = useMemo(() => {
-    return LOTES_INICIALES.find((l) => l.id === Number(loteIdSeleccionado)) || LOTES_INICIALES[0]
-  }, [loteIdSeleccionado])
+    return lotes.find((l) => l.id === Number(loteIdSeleccionado)) || null
+  }, [lotes, loteIdSeleccionado])
 
   // Parámetros editables por el jurado (RF05, RF12)
   const [costoTotalEtapa, setCostoTotalEtapa] = useState(1500000) // COP
@@ -23,7 +31,7 @@ export default function Economia() {
   // Cuando cambia el lote del selector, actualizamos valores sugeridos
   const handleCambiarLote = (id) => {
     setLoteIdSeleccionado(id)
-    const encontrado = LOTES_INICIALES.find((l) => l.id === Number(id))
+    const encontrado = lotes.find((l) => l.id === Number(id))
     if (encontrado) {
       const kgReal = encontrado.cantidad_recibida || 100
       const costoUnitarioReal = encontrado.costo_unitario || 15000
@@ -102,7 +110,7 @@ export default function Economia() {
           onChange={(e) => handleCambiarLote(e.target.value)}
           className="px-3 py-2 bg-[#FDF8F5] border border-cacao-200 rounded-xl text-xs font-semibold text-cacao-900 focus:bg-white focus:ring-2 focus:ring-cacao-500 focus:outline-hidden"
         >
-          {LOTES_INICIALES.map((l) => (
+          {lotes.map((l) => (
             <option key={l.id} value={l.id}>
               {l.codigo} — {l.productor?.municipio} ({l.tipo_material}) • Base: {formatCop(l.costo_unitario)}/kg
             </option>
@@ -197,7 +205,7 @@ export default function Economia() {
                 <IconChart className="w-4 h-4 text-cacao-600" /> Resultados en Tiempo Real
               </h2>
               <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900">
-                Lote {loteSeleccionado.codigo}
+                {loteSeleccionado ? `Lote ${loteSeleccionado.codigo}` : 'Sin lotes registrados'}
               </span>
             </div>
 

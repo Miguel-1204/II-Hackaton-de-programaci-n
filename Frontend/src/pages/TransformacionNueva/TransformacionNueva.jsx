@@ -91,7 +91,6 @@ export default function TransformacionNueva() {
 
   const loteDe = (id) => lotes.find((l) => String(l.id) === String(id))
   const lotesEntrada = lotes.filter((l) => !esBloqueado(l) && Number(l.disponible) > 0)
-  const lotesSalida = lotes.filter((l) => !esBloqueado(l))
   const lotesElegidos = entradas.map((e) => loteDe(e.lote_id)).filter(Boolean)
 
   // Merma en vivo: se recalcula con cada cambio de cantidades
@@ -117,13 +116,8 @@ export default function TransformacionNueva() {
     setErrorGeneral('')
   }
 
-  // Al elegir el primer lote de entrada, se propone el mismo lote como salida
-  const elegirLoteEntrada = (key, valor) => {
+  const elegirLoteEntrada = (key, valor) =>
     cambiarFila(setEntradas, 'ent', key, 'lote_id', valor)
-    setSalidas((filas) =>
-      filas.length === 1 && !filas[0].lote_id ? [{ ...filas[0], lote_id: valor }] : filas,
-    )
-  }
 
   const quitarFila = (setFilas, key) => setFilas((filas) => filas.filter((f) => f.key !== key))
 
@@ -152,7 +146,12 @@ export default function TransformacionNueva() {
     }
 
     entradas.forEach((f) => revisarFila('ent', f, true))
-    salidas.forEach((f) => revisarFila('sal', f, false))
+    salidas.forEach((f) => {
+      const idC = `sal-${f.key}-cantidad`
+      const cantidad = Number(f.cantidad)
+      if (!f.cantidad) nuevos[idC] = 'Escribe la cantidad.'
+      else if (!(cantidad > 0)) nuevos[idC] = 'Debe ser mayor que cero.'
+    })
 
     incidencias.forEach((i) => {
       if (!i.lote_id) nuevos[`inc-${i.key}-lote_id`] = 'Selecciona el lote afectado.'
@@ -188,7 +187,7 @@ export default function TransformacionNueva() {
         observaciones: form.observaciones.trim(),
         clave_idempotencia: claveIdempotencia,
         entradas: entradas.map(movimiento),
-        salidas: salidas.map(movimiento),
+        salidas: salidas.map(({ cantidad, unidad }) => ({ cantidad: Number(cantidad), unidad })),
         incidencias: incidencias.map((i) => ({
           lote_id: Number(i.lote_id),
           tipo: i.tipo,
@@ -198,8 +197,8 @@ export default function TransformacionNueva() {
       })
       showMessage(
         r.supera_umbral
-          ? `Transformación ${r.codigo} registrada. Merma de ${fmt(r.merma_pct)} %: se abrió una alerta.`
-          : `Transformación ${r.codigo} registrada. Merma de ${fmt(r.merma_pct)} %.`,
+          ? `Transformación ${r.codigo} registrada. Lote(s) creado(s): ${r.lotes_creados.map((l) => l.codigo).join(', ')}. Merma de ${fmt(r.merma_pct)} %: se abrió una alerta.`
+          : `Transformación ${r.codigo} registrada. Lote(s) creado(s): ${r.lotes_creados.map((l) => l.codigo).join(', ')}. Merma de ${fmt(r.merma_pct)} %.`,
       )
       navigate('/operador', { replace: true })
     } catch (err) {
@@ -413,19 +412,57 @@ export default function TransformacionNueva() {
             <h2 id="titulo-salidas" className="text-lg font-semibold text-cacao-800">
               Salidas
             </h2>
-            <p className="text-sm text-cacao-700">Producto obtenido al terminar la etapa.</p>
+            <p className="text-sm text-cacao-700">
+              Cada salida crea un lote nuevo, vinculado a esta transformación y al productor de las entradas.
+            </p>
             <ul className="mt-3 space-y-3">
-              {salidas.map((f) =>
-                filaMov(
-                  'sal',
-                  f,
-                  lotesSalida,
-                  salidas,
-                  setSalidas,
-                  (key, v) => cambiarFila(setSalidas, 'sal', key, 'lote_id', v),
-                  false,
-                ),
-              )}
+              {salidas.map((f, index) => {
+                const idC = `sal-${f.key}-cantidad`
+                return (
+                  <li key={f.key} className="tn-fila">
+                    <div className="tn-fila-movimiento">
+                      <div>
+                        <span className="tn-etiqueta">Nuevo lote</span>
+                        <p className="text-sm text-cacao-700">
+                          {form.codigo || 'TRF'}-OUT-{String(index + 1).padStart(2, '0')}
+                        </p>
+                      </div>
+                      <div>
+                        <label htmlFor={idC} className="tn-etiqueta">Cantidad</label>
+                        <input
+                          id={idC}
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="0.001"
+                          value={f.cantidad}
+                          onChange={(e) => cambiarFila(setSalidas, 'sal', f.key, 'cantidad', e.target.value)}
+                          className={clase(idC)}
+                          {...aria(idC)}
+                        />
+                        {error(idC)}
+                      </div>
+                      <div>
+                        <label htmlFor={`sal-${f.key}-unidad`} className="tn-etiqueta">Unidad</label>
+                        <select
+                          id={`sal-${f.key}-unidad`}
+                          value={f.unidad}
+                          onChange={(e) => cambiarFila(setSalidas, 'sal', f.key, 'unidad', e.target.value)}
+                          className={clase('')}
+                        >
+                          {UNIDADES.map((u) => <option key={u} value={u}>{u}</option>)}
+                        </select>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => quitarFila(setSalidas, f.key)}
+                        disabled={salidas.length === 1}
+                        className="tn-boton tn-quitar"
+                      >Quitar</button>
+                    </div>
+                  </li>
+                )
+              })}
             </ul>
             <button
               type="button"

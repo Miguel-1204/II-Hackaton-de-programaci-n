@@ -18,7 +18,13 @@ function createIncidenciasEstadosRouter({ controller, authenticate }) {
   const router = Router()
 
   router.post('/incidencias', authenticate, controller.createIncidencia)
-  router.get('/incidencias', authenticate, controller.listIncidencias)
+  router.get(
+    '/incidencias/resumen/criticas',
+    authenticate,
+    requireRoles('ADMINISTRADOR', 'OPERADOR'),
+    controller.getCriticalOpenCount,
+  )
+  router.get('/incidencias', authenticate, requireRoles('ADMINISTRADOR'), controller.listIncidencias)
   router.patch('/lotes/:id/estado', authenticate, requireRoles('ADMINISTRADOR'), controller.updateEstadoLote)
   router.get('/lotes/:id/historial-estados', authenticate, controller.getHistorialEstados)
 

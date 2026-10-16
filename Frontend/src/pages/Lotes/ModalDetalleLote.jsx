@@ -18,18 +18,18 @@ export default function ModalDetalleLote({ abierto, lote, alCerrar, esAdmin, alA
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-detalle-lote-titulo"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-cacao-950/60 backdrop-blur-xs overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-cacao-950/60 backdrop-blur-xs overflow-y-auto"
     >
-      <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-cacao-200 overflow-hidden my-8 max-h-[90vh] flex flex-col">
+      <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-cacao-200 overflow-hidden my-2 sm:my-8 max-h-[94dvh] flex flex-col">
         {/* Cabecera */}
-        <div className="flex items-center justify-between px-6 py-4 bg-cacao-900 text-white shrink-0">
+        <div className="flex items-center justify-between gap-2 px-3 sm:px-6 py-3 sm:py-4 bg-cacao-900 text-white shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-mazorca-500/20 text-mazorca-400 font-bold flex items-center justify-center text-xl">
               <IconPackage className="text-mazorca-400" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 id="modal-detalle-lote-titulo" className="text-xl font-bold font-display text-white">
+                <h2 id="modal-detalle-lote-titulo" className="text-base sm:text-xl font-bold font-display text-white break-all">
                   Lote {lote.codigo}
                 </h2>
                 <BadgeEstado estado={lote.estado} />
@@ -52,13 +52,13 @@ export default function ModalDetalleLote({ abierto, lote, alCerrar, esAdmin, alA
         </div>
 
         {/* Cuerpo scrolleable */}
-        <div className="p-6 space-y-6 overflow-y-auto bg-[#FDF8F5]">
+        <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 overflow-y-auto bg-[#FDF8F5]">
           {/* Card Resumen de Inventario (RF08) */}
           <div className="bg-white p-4 rounded-xl border border-cacao-200 shadow-xs">
             <h3 className="text-xs font-bold text-cacao-800 uppercase tracking-wider mb-3 flex items-center gap-2">
               <IconChart className="w-4 h-4" /> RF08: Balance de Inventario
             </h3>
-            <div className="grid grid-cols-3 gap-3 text-center mb-3">
+            <div className="grid grid-cols-1 min-[420px]:grid-cols-3 gap-2 sm:gap-3 text-center mb-3">
               <div className="p-2.5 rounded-lg bg-cacao-50 border border-cacao-100">
                 <span className="text-[11px] text-cacao-600 block">Recibido</span>
                 <span className="text-base font-bold text-cacao-900">{formatKg(lote.cantidad_recibida)}</span>
@@ -212,7 +212,7 @@ export default function ModalDetalleLote({ abierto, lote, alCerrar, esAdmin, alA
         </div>
 
         {/* Pie del modal */}
-        <div className="flex items-center justify-between px-6 py-4 bg-white border-t border-cacao-200 shrink-0">
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2 px-3 sm:px-6 py-3 sm:py-4 bg-white border-t border-cacao-200 shrink-0">
           <div>
             {esAdmin && alAbrirGestionEstado && (
               <button
@@ -221,7 +221,7 @@ export default function ModalDetalleLote({ abierto, lote, alCerrar, esAdmin, alA
                   alCerrar()
                   alAbrirGestionEstado(lote)
                 }}
-                className="px-4 py-2 rounded-lg bg-cacao-800 hover:bg-cacao-900 text-white font-semibold text-xs transition cursor-pointer flex items-center gap-1.5"
+                className="px-3 sm:px-4 py-2 rounded-lg bg-cacao-800 hover:bg-cacao-900 text-white font-semibold text-xs transition cursor-pointer flex items-center justify-center gap-1.5"
               >
                 <IconGear className="w-4 h-4" />
                 <span>Cambiar Estado (Bloquear / Liberar)</span>
@@ -231,7 +231,7 @@ export default function ModalDetalleLote({ abierto, lote, alCerrar, esAdmin, alA
           <button
             type="button"
             onClick={alCerrar}
-            className="px-4 py-2 rounded-lg border border-cacao-300 text-cacao-700 hover:bg-cacao-100 font-medium text-xs transition cursor-pointer"
+            className="px-4 py-2 rounded-lg border border-cacao-300 text-cacao-700 hover:bg-cacao-100 font-medium text-xs transition cursor-pointer self-end sm:self-auto"
           >
             Cerrar Ficha
           </button>

@@ -69,6 +69,9 @@ function createNlpService({ estadisticasModel, clock = () => new Date() }) {
   }
 
   function classifyIntent(text) {
+    if (/(balance general|balance de productos|balance por producto|resumen de productos|estado del inventario por producto)/.test(text)) {
+      return 'CONSULTA_BALANCE_PRODUCTOS'
+    }
     if (/bloquead|retenid|bloqueo/.test(text)) return 'CONSULTA_LOTES_BLOQUEADOS'
     if (/incidencia|alerta|calidad|defecto/.test(text)) return 'CONSULTA_INCIDENCIAS_CALIDAD'
     if (/costo promedio|coste promedio|promedio.*(costo|coste)|costo.*kilogramo|costo.*por kg|costo.*por kilo/.test(text)) {
@@ -140,6 +143,32 @@ function createNlpService({ estadisticasModel, clock = () => new Date() }) {
       let respuestaEnLenguajeNatural
 
       switch (intencion) {
+        case 'CONSULTA_BALANCE_PRODUCTOS': {
+          const productos = await estadisticasModel.getBalanceProductos()
+          const palabrasIgnoradas = new Set(['balance', 'general', 'producto', 'productos', 'por', 'de', 'del', 'el', 'la', 'los', 'las', 'para', 'inventario', 'resumen', 'consultados', 'consultadas', 'actual', 'actuales', 'stock', 'existencia', 'existencias', 'total', 'consulta'])
+          const terminosProducto = normalizada
+            .split(/[^a-z0-9]+/)
+            .filter((word) => word.length > 2 && !palabrasIgnoradas.has(word))
+          const seleccion = terminosProducto.length
+            ? productos.filter((item) => terminosProducto.every((term) => normalizeText(item.producto).includes(term)))
+            : productos
+          const totalDisponibleKg = seleccion.reduce((sum, item) => sum + item.disponibleKg, 0)
+          const totalLotes = seleccion.reduce((sum, item) => sum + item.lotes, 0)
+          datos = {
+            productos: seleccion,
+            resumen: {
+              totalProductos: seleccion.length,
+              totalLotes,
+              cantidadRegistradaKg: seleccion.reduce((sum, item) => sum + item.cantidadRegistradaKg, 0),
+              consumidoKg: seleccion.reduce((sum, item) => sum + item.consumidoKg, 0),
+              disponibleKg: totalDisponibleKg,
+            },
+          }
+          respuestaEnLenguajeNatural = seleccion.length
+            ? `Balance de ${seleccion.length} producto(s): ${totalDisponibleKg.toLocaleString('es-CO')} kg disponibles en ${totalLotes} lotes. Se excluyen del saldo disponible los lotes bloqueados y los saldos no evaluables.`
+            : 'No encontré productos que coincidan con el nombre consultado. Prueba con el nombre del catálogo o pide el balance general de productos.'
+          break
+        }
         case 'CONSULTA_PRODUCTORES_MERMA_UMBRAL': {
           const rows = await estadisticasModel.getMermasPorProductor({ ...filters, superaUmbral: true })
           datos = rows.filter((row) => row.estado_evaluacion === 'EVALUABLE' && row.supera_umbral === true)

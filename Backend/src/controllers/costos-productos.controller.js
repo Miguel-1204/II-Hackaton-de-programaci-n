@@ -19,6 +19,15 @@ function createCostosProductosController(productosService) {
   }
 
   return {
+    async listProductosPublicos(request, response, next) {
+      try {
+        const productos = await productosService.listProductosPublicos()
+        return response.status(200).json({ productos })
+      } catch (error) {
+        return next(error)
+      }
+    },
+
     /**
      * Registra un nuevo producto en el catálogo comercial.
      *

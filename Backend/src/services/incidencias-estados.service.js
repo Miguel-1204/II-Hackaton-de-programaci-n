@@ -16,6 +16,10 @@ function createIncidenciasEstadosService({ incidenciasEstadosModel, lotesModel }
   }
 
   return {
+    async getCriticalOpenCount() {
+      return incidenciasEstadosModel.countCriticalOpenIncidencias()
+    },
+
     /**
      * Registra una nueva incidencia operativa o de calidad asociada a un lote.
      *
@@ -58,7 +62,7 @@ function createIncidenciasEstadosService({ incidenciasEstadosModel, lotesModel }
      *
      * @param {number} loteId - ID del lote a modificar.
      * @param {Object} user - Usuario autenticado con sus roles.
-     * @param {string} estadoNuevo - Nuevo estado (ej. BLOQUEADO, DISPONIBLE, LIBERADO).
+     * @param {string} estadoNuevo - Nuevo estado (PENDIENTE, LIBERADO o BLOQUEADO).
      * @param {string} motivo - Motivo obligatorio registrado en historial de estados.
      * @returns {Promise<{ lote: Object, historial: Object }>}
      */
@@ -85,9 +89,7 @@ function createIncidenciasEstadosService({ incidenciasEstadosModel, lotesModel }
       }
 
       const allowedStates = new Set([
-        'RECIBIDO',
         'PENDIENTE',
-        'DISPONIBLE',
         'LIBERADO',
         'BLOQUEADO',
       ])

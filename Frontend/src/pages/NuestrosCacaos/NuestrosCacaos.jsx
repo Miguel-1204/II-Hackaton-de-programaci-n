@@ -1,10 +1,14 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../../component/Navbar";
 import Footer from "../../component/Footer";
-import { catalogProducts } from "../../data/catalogProducts";
+import { obtenerCatalogoPublico, obtenerFichaTecnicaPublica } from "../../services/catalogoPublicoService";
 import imagenFondo from "../../assets/Chocolate default.jpeg";
 import "./NuestrosCacaos.css";
+
+const formatoCOP = (valor) => valor == null
+  ? 'No registrado'
+  : `$ ${Number(valor).toLocaleString('es-CO')} COP`;
 
 /**
  * Sección "Nuestros Cacaos" — Catálogo de productos.
@@ -12,6 +16,9 @@ import "./NuestrosCacaos.css";
  * y por rango de precio, y efecto hover (tarjeta negra + nombre en blanco).
  */
 export default function NuestrosCacaos() {
+  const [productos, setProductos] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [errorCatalogo, setErrorCatalogo] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [precioMin, setPrecioMin] = useState("");
   const [precioMax, setPrecioMax] = useState("");
@@ -20,35 +27,86 @@ export default function NuestrosCacaos() {
   // Estado del modal
   const [modalAbierto, setModalAbierto] = useState(false);
   const [productoSeleccionado, setProductoSeleccionado] = useState(null);
+  const [fichaSeleccionada, setFichaSeleccionada] = useState(null);
+  const [cargandoFicha, setCargandoFicha] = useState(false);
+  const [errorFicha, setErrorFicha] = useState("");
   const [volteado, setVolteado] = useState(false);
+  const solicitudFicha = useRef(0);
 
-  const productosFiltrados = catalogProducts.filter((producto) => {
+  useEffect(() => {
+    let activo = true;
+    const cargarCatalogo = () => {
+      obtenerCatalogoPublico()
+        .then((items) => {
+          if (!activo) return;
+          setProductos(items);
+          setErrorCatalogo("");
+        })
+        .catch((error) => {
+          if (activo && productos.length === 0) setErrorCatalogo(error.message);
+        })
+        .finally(() => { if (activo) setCargando(false); });
+    };
+
+    const actualizarAlVolver = () => {
+      if (document.visibilityState === "visible") cargarCatalogo();
+    };
+
+    cargarCatalogo();
+    const intervalo = window.setInterval(cargarCatalogo, 30000);
+    window.addEventListener("focus", cargarCatalogo);
+    document.addEventListener("visibilitychange", actualizarAlVolver);
+    return () => {
+      activo = false;
+      window.clearInterval(intervalo);
+      window.removeEventListener("focus", cargarCatalogo);
+      document.removeEventListener("visibilitychange", actualizarAlVolver);
+    };
+  }, []);
+
+  const productosFiltrados = useMemo(() => productos.filter((producto) => {
     const cumpleNombre = producto.name
       .toLowerCase()
       .includes(busqueda.trim().toLowerCase());
 
     const min = Number(precioMin);
     const max = Number(precioMax);
-    const cumpleMin = precioMin.trim() === "" || producto.price >= min;
-    const cumpleMax = precioMax.trim() === "" || producto.price <= max;
+    const precio = Number(producto.price);
+    const cumpleMin = precioMin.trim() === "" || (Number.isFinite(precio) && precio >= min);
+    const cumpleMax = precioMax.trim() === "" || (Number.isFinite(precio) && precio <= max);
 
     return cumpleNombre && cumpleMin && cumpleMax;
-  });
+  }), [productos, busqueda, precioMin, precioMax]);
 
   const baseInputCompact =
     "w-full rounded-lg border bg-white px-3 py-2 text-cacao-900 " +
     "placeholder:text-cacao-500/60 focus:outline-none focus:ring-2 " +
     "focus:ring-mazorca-500 focus:border-mazorca-500 border-cacao-200";
 
-  const abrirModal = (producto) => {
+  const abrirModal = async (producto) => {
+    const solicitudActual = ++solicitudFicha.current;
     setProductoSeleccionado(producto);
+    setFichaSeleccionada(null);
+    setCargandoFicha(true);
+    setErrorFicha("");
     setVolteado(false);
     setModalAbierto(true);
+    try {
+      const ficha = await obtenerFichaTecnicaPublica(producto.codigo);
+      if (solicitudActual === solicitudFicha.current) setFichaSeleccionada(ficha);
+    } catch (error) {
+      if (solicitudActual === solicitudFicha.current) setErrorFicha(error.message || "No se pudo cargar la ficha del producto.");
+    } finally {
+      if (solicitudActual === solicitudFicha.current) setCargandoFicha(false);
+    }
   };
 
   const cerrarModal = () => {
+    solicitudFicha.current += 1;
     setModalAbierto(false);
     setProductoSeleccionado(null);
+    setFichaSeleccionada(null);
+    setErrorFicha("");
     setVolteado(false);
   };
 
@@ -56,23 +114,23 @@ export default function NuestrosCacaos() {
     setVolteado((v) => !v);
   };
 
-  const p = productoSeleccionado;
+  const p = fichaSeleccionada;
 
-  if (modalAbierto && p) {
+  if (modalAbierto && productoSeleccionado) {
     return (
       <div className="min-h-screen flex flex-col bg-cacao-50 text-cacao-900 font-sans">
         <Navbar />
 
         {/* Modal Overlay */}
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-start sm:items-center justify-center overflow-y-auto p-2 sm:p-4 bg-black/60 backdrop-blur-sm"
           onClick={cerrarModal}
           role="dialog"
           aria-modal="true"
           aria-label="Ficha del producto"
         >
           <div
-            className="w-full max-w-md p-0 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+            className="w-full max-w-md max-h-[calc(100dvh_-_1rem)] my-auto p-0 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Barra superior del modal */}
@@ -81,7 +139,7 @@ export default function NuestrosCacaos() {
                 onClick={manejarVoltear}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white text-cacao-800 text-sm font-medium shadow-sm hover:bg-cacao-200 transition-colors"
               >
-                QR
+                Código
               </button>
               <button
                 onClick={cerrarModal}
@@ -93,70 +151,73 @@ export default function NuestrosCacaos() {
             </div>
 
             {/* Contenido del modal con efecto flip */}
-            <div className="relative perspective-1000 h-[420px]">
-              <div
-                className={`flip-inner w-full h-full transition-transform duration-500 ${
-                  volteado ? "rotate-y-180" : ""
-                }`}
-              >
+            <div className="relative perspective-1000 h-[min(420px,calc(100dvh_-_180px))] min-h-[320px]">
+              {cargandoFicha ? (
+                <div className="h-full flex items-center justify-center bg-cacao-50 text-cacao-700" role="status">
+                  Cargando ficha del producto…
+                </div>
+              ) : errorFicha ? (
+                <div className="h-full flex items-center justify-center p-6 bg-cacao-50 text-peligro-600" role="alert">
+                  {errorFicha}
+                </div>
+              ) : p && (
+                <div className={`flip-inner w-full h-full transition-transform duration-500 ${volteado ? "rotate-y-180" : ""}`}>
                 {/* FRENTE */}
                 <div
-                  className="flip-face flip-front absolute inset-0 bg-cacao-50 p-8 backface-hidden flex flex-col items-center text-center"
+                  className="flip-face flip-front absolute inset-0 overflow-y-auto bg-cacao-50 p-4 sm:p-8 backface-hidden flex flex-col items-center text-center"
                 >
                   <h2 className="font-display text-xl font-bold text-cacao-900 mb-6">
-                    {p.name} - Lote {p.lote}
+                    {p.producto.nombre}
                   </h2>
-                  <ul className="space-y-5 text-cacao-700 text-sm w-full max-w-md mx-auto">
-                    <li className="flex justify-between px-2">
+                  <p className="-mt-4 mb-3 text-xs text-cacao-600">
+                    {p.producto.descripcion || 'Sin descripción registrada.'}
+                  </p>
+                  <ul className="space-y-3 sm:space-y-5 text-cacao-700 text-xs sm:text-sm w-full max-w-md mx-auto">
+                    <li className="flex flex-col min-[420px]:flex-row min-[420px]:justify-between gap-1 px-2 text-left">
                       <span className="text-cacao-600">Origen:</span>
-                      <span className="font-medium">{p.origen}</span>
+                      <span className="font-medium">{p.origenes.join(', ') || 'Sin trazabilidad de origen'}</span>
                     </li>
-                    <li className="flex justify-between px-2">
+                    <li className="flex flex-col min-[420px]:flex-row min-[420px]:justify-between gap-1 px-2 text-left">
                       <span className="text-cacao-600">Presentación:</span>
-                      <span className="font-medium">{p.presentacion}</span>
+                      <span className="font-medium">
+                        {formatoCOP(p.producto.precioReferencia)} / {p.producto.unidadComercial || 'unidad'}
+                      </span>
                     </li>
-                    <li className="flex justify-between items-center px-2">
+                    <li className="flex flex-col min-[420px]:flex-row min-[420px]:justify-between gap-1 px-2 text-left">
                       <span className="text-cacao-600">Estado:</span>
                       <span className="flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-mazorca-600" />
-                        <span className="font-medium text-mazorca-700">{p.estado}</span>
+                        <span className={`w-1.5 h-1.5 rounded-full ${p.disponible ? 'bg-emerald-600' : 'bg-amber-600'}`} />
+                        <span className="font-medium text-mazorca-700">{p.estadoComercial}</span>
                       </span>
+                    </li>
+                    <li className="flex flex-col min-[420px]:flex-row min-[420px]:justify-between gap-1 px-2 text-left">
+                      <span className="text-cacao-600">Stock liberado:</span>
+                      <span className="font-medium">{p.stockDisponibleKg.toLocaleString('es-CO')} kg</span>
+                    </li>
+                    <li className="flex flex-col min-[420px]:flex-row min-[420px]:justify-between gap-1 px-2 text-left">
+                      <span className="text-cacao-600">Lotes:</span>
+                      <span className="font-medium">{p.lotes.map((lote) => lote.codigo).join(', ') || 'Sin lotes vinculados'}</span>
                     </li>
                   </ul>
                   <button
-                    className="mt-6 w-full rounded-lg bg-cacao-800 px-4 py-3 font-semibold text-cacao-50 hover:bg-cacao-900 transition-colors"
-                    onClick={() => navigate(`/ficha-completa/${p.id}`)}
+                    className="mt-auto pt-4 w-full rounded-lg bg-cacao-800 px-4 py-2.5 sm:py-3 font-semibold text-cacao-50 hover:bg-cacao-900 transition-colors"
+                    onClick={() => navigate(`/ficha-completa/${encodeURIComponent(p.producto.codigo)}`)}
                   >
                     Ver ficha completa
                   </button>
                 </div>
 
-                {/* REVERSO (código QR) */}
+                {/* Código registrado en la base de datos */}
                 <div
                   className="flip-face flip-back absolute inset-0 bg-cacao-50 p-6 backface-hidden flex flex-col items-center justify-center rotate-y-180"
                 >
-                  <div className="w-32 h-32 bg-white border-4 border-cacao-200 rounded-lg flex items-center justify-center mb-4 shadow-inner">
-                    <svg
-                      className="w-full h-full text-cacao-600"
-                      viewBox="0 0 100 100"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <rect width="100" height="100" fill="none" />
-                      <rect x="10" y="10" width="8" height="8" stroke="currentColor" strokeWidth="4" />
-                      <rect x="82" y="10" width="8" height="8" stroke="currentColor" strokeWidth="4" />
-                      <rect x="10" y="82" width="8" height="8" stroke="currentColor" strokeWidth="4" />
-                      <rect x="82" y="82" width="8" height="8" stroke="currentColor" strokeWidth="4" />
-                      <rect x="30" y="30" width="40" height="40" stroke="currentColor" strokeWidth="3" />
-                      <rect x="35" y="35" width="30" height="30" fill="currentColor" />
-                      <rect x="40" y="40" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" />
-                    </svg>
-                  </div>
-                  <p className="text-cacao-700 text-sm font-medium">
-                    Código QR del producto
+                  <p className="text-cacao-700 text-sm font-medium mb-3">
+                    Código del producto registrado
                   </p>
+                  <p className="font-mono text-2xl font-bold text-cacao-900">{p.producto.codigo}</p>
                 </div>
               </div>
+              )}
             </div>
           </div>
         </div>
@@ -174,7 +235,7 @@ export default function NuestrosCacaos() {
           <p className="font-display text-lg font-semibold text-cacao-700">
             Catálogo
           </p>
-          <h1 className="mt-1 font-display text-4xl font-semibold text-cacao-800">
+              <h1 className="mt-1 font-display text-3xl sm:text-4xl font-semibold text-cacao-800">
             Nuestros Cacaos
           </h1>
           <p className="mt-3 text-cacao-600">
@@ -238,7 +299,11 @@ export default function NuestrosCacaos() {
         </section>
 
         {/* Resultado: productos en 3 columnas */}
-        {productosFiltrados.length > 0 ? (
+        {cargando ? (
+          <p className="text-center text-cacao-600" role="status">Cargando catálogo…</p>
+        ) : errorCatalogo && productos.length === 0 ? (
+          <p className="text-center text-peligro-600" role="alert">{errorCatalogo}</p>
+        ) : productosFiltrados.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
             {productosFiltrados.map((producto) => (
               <article
@@ -248,13 +313,20 @@ export default function NuestrosCacaos() {
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => e.key === "Enter" && abrirModal(producto)}
-                style={{
-                  backgroundImage: `url(${imagenFondo})`,
-                  backgroundSize: "cover",
-                  backgroundPosition: "center",
-                  cursor: "pointer",
-                }}
+                style={{ cursor: "pointer" }}
               >
+                <img
+                  src={producto.imagenUrl || imagenFondo}
+                  alt={producto.name}
+                  className="cacaos-product-image"
+                  onError={(event) => { event.currentTarget.src = imagenFondo; }}
+                />
+                <span
+                  className={`cacaos-availability ${producto.disponible ? "is-available" : "is-unavailable"}`}
+                  aria-label={`Inventario: ${producto.disponible ? "Disponible" : "No disponible"}`}
+                >
+                  {producto.disponible ? "Disponible" : "No disponible"}
+                </span>
                 {/* Capa que aparece al hacer hover: negra + nombre en blanco */}
                 <div className="cacaos-overlay">
                   <span className="font-display text-2xl font-semibold">

@@ -22,6 +22,34 @@
 body {
   margin: 0;
   font-family: var(--font-sans);
+  min-width: 320px;
+  overflow-x: hidden;
+}
+
+#root {
+  min-height: 100vh;
+  min-height: 100svh;
+  width: 100%;
+}
+
+img,
+video,
+canvas {
+  max-width: 100%;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-mazorca-500);
+  outline-offset: 2px;
+}
+
+@media (max-width: 639px) {
+  /* Evita el zoom automático de Safari al enfocar campos pequeños. */
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
 }
 
 /* Título destacado con fuente display */

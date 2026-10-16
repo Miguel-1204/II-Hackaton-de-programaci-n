@@ -34,13 +34,18 @@ function sameIdempotentRequest(existing, request) {
     moneda,
     observaciones,
     }))
+  const auditedOutputs = existing.solicitudInicial?.lotesSalida
+  const requestedOutputs = request.lotesSalida.map(({ loteId, cantidad, unidad }) => ({
+    loteId: loteId || null, cantidad, unidad,
+  }))
+  const comparableOutputs = auditedOutputs || outputs
   return existing.codigo === request.codigo &&
     existing.etapa === request.etapa &&
     existing.estado === request.estado &&
     JSON.stringify(normalizeList(entries, ['loteId', 'cantidad', 'unidad'])) ===
       JSON.stringify(normalizeList(request.lotesEntrada, ['loteId', 'cantidad', 'unidad'])) &&
-    JSON.stringify(normalizeList(outputs, ['loteId', 'cantidad', 'unidad'])) ===
-      JSON.stringify(normalizeList(request.lotesSalida, ['loteId', 'cantidad', 'unidad'])) &&
+    JSON.stringify(normalizeList(comparableOutputs.map(({ loteId, cantidad, unidad }) => ({ loteId: loteId || null, cantidad, unidad })), ['loteId', 'cantidad', 'unidad'])) ===
+      JSON.stringify(normalizeList(requestedOutputs, ['loteId', 'cantidad', 'unidad'])) &&
     JSON.stringify(normalizeList(costs, ['concepto', 'valor', 'moneda', 'observaciones'])) ===
       JSON.stringify(normalizeList(request.costos, ['concepto', 'valor', 'moneda', 'observaciones']))
 }
@@ -133,6 +138,7 @@ function createTransformacionesService({ transformacionesModel, lotesModel }) {
 
       // 3. Validación de lotes de salida
       for (const output of data.lotesSalida) {
+        if (!output.loteId) continue
         const lote = await lotesModel.findById(output.loteId)
         if (!lote) {
           const err = new Error(`El lote de salida con ID ${output.loteId} no existe en el sistema`)

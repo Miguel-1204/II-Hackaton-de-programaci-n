@@ -2,8 +2,8 @@
  * @fileoverview Modelo de datos para incidencias operativas, control de estados y auditoría de bloqueos/liberaciones.
  */
 
-const { eq, sql } = require('drizzle-orm')
-const { incidencias, historialEstados, lotes, auditoriaEventos } = require('../db/schema')
+const { and, eq, sql } = require('drizzle-orm')
+const { incidencias, historialEstados, lotes, transformaciones, auditoriaEventos } = require('../db/schema')
 
 /**
  * Factoría que instancia el modelo de incidencias y control de estados de lotes.
@@ -17,6 +17,16 @@ function createIncidenciasEstadosModel(db) {
   }
 
   return {
+    async countCriticalOpenIncidencias() {
+      const [row] = await db.execute(sql`
+        SELECT count(*) AS total
+        FROM incidencias
+        WHERE estado = 'ABIERTA'
+          AND upper(severidad) IN ('ALTA', 'CRITICA', 'CRÍTICA')
+      `)
+      return Number(row?.total || 0)
+    },
+
     /**
      * Registra una nueva incidencia operativa o de calidad.
      *
@@ -57,12 +67,32 @@ function createIncidenciasEstadosModel(db) {
      * @returns {Promise<Array<Object>>}
      */
     async listIncidencias(filters = {}) {
-      let query = db.select().from(incidencias)
+      const conditions = []
 
       if (filters.loteId) {
-        query = query.where(eq(incidencias.loteId, filters.loteId))
+        conditions.push(eq(incidencias.loteId, filters.loteId))
       }
+      if (filters.estado) conditions.push(eq(incidencias.estado, filters.estado))
+      if (filters.severidad) conditions.push(eq(incidencias.severidad, filters.severidad))
 
+      let query = db
+        .select({
+          id: incidencias.id,
+          loteId: incidencias.loteId,
+          loteCodigo: lotes.codigo,
+          transformacionId: incidencias.transformacionId,
+          transformacionCodigo: transformaciones.codigo,
+          usuarioId: incidencias.usuarioId,
+          tipo: incidencias.tipo,
+          descripcion: incidencias.descripcion,
+          severidad: incidencias.severidad,
+          estado: incidencias.estado,
+          creadaEn: incidencias.creadaEn,
+        })
+        .from(incidencias)
+        .innerJoin(lotes, eq(lotes.id, incidencias.loteId))
+        .leftJoin(transformaciones, eq(transformaciones.id, incidencias.transformacionId))
+      if (conditions.length) query = query.where(and(...conditions))
       return await query.orderBy(incidencias.creadaEn)
     },
 
@@ -72,7 +102,7 @@ function createIncidenciasEstadosModel(db) {
      *
      * @param {number} loteId - ID del lote.
      * @param {number} usuarioId - ID del usuario que autoriza el cambio.
-     * @param {string} estadoNuevo - Nuevo estado (ej. BLOQUEADO, LIBERADO, DISPONIBLE).
+     * @param {string} estadoNuevo - Nuevo estado (PENDIENTE, LIBERADO o BLOQUEADO).
      * @param {string} motivo - Justificación obligatoria del cambio.
      * @returns {Promise<{ lote: Object, historial: Object }>}
      */

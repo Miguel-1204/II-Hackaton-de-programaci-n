@@ -85,10 +85,10 @@ function validateUpdateEstadoLoteBody(body) {
   const { estadoNuevo, motivo } = body
 
   if (typeof estadoNuevo !== 'string' || !estadoNuevo.trim()) {
-    return { error: 'El campo "estadoNuevo" es obligatorio (ej. BLOQUEADO, DISPONIBLE, LIBERADO)' }
+    return { error: 'El campo "estadoNuevo" es obligatorio (PENDIENTE, LIBERADO o BLOQUEADO)' }
   }
-  if (!['RECIBIDO', 'PENDIENTE', 'DISPONIBLE', 'LIBERADO', 'BLOQUEADO'].includes(estadoNuevo.trim().toUpperCase())) {
-    return { error: 'estadoNuevo debe ser RECIBIDO, PENDIENTE, DISPONIBLE, LIBERADO o BLOQUEADO' }
+  if (!['PENDIENTE', 'LIBERADO', 'BLOQUEADO'].includes(estadoNuevo.trim().toUpperCase())) {
+    return { error: 'estadoNuevo debe ser PENDIENTE, LIBERADO o BLOQUEADO' }
   }
 
   if (typeof motivo !== 'string' || !motivo.trim()) {

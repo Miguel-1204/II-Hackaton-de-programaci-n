@@ -3,10 +3,10 @@ import { useSearchParams } from 'react-router-dom'
 import BadgeEstado from '../../component/BadgeEstado'
 import ModalDetalleLote from '../Lotes/ModalDetalleLote'
 import {
-  LOTES_INICIALES,
   MUNICIPIOS_HUILA,
   obtenerLotes,
-  persistirLotesDemo
+  persistirLotesDemo,
+  cambiarEstadoLote
 } from '../../services/lotesService'
 import { registrarAuditoria, descargarCSV } from '../../services/adminService'
 import { IconCheck, IconX, IconSearch, IconEmergency, IconEye, IconLock, IconUnlock, IconAlert, IconDownload } from '../../component/Icons'
@@ -18,7 +18,7 @@ export default function Productos() {
   const [searchParams] = useSearchParams()
   const loteUrlParam = searchParams.get('lote')
 
-  const [lotes, setLotes] = useState(LOTES_INICIALES)
+  const [lotes, setLotes] = useState([])
   const [cargando, setCargando] = useState(true)
 
   // Filtros RF11
@@ -39,9 +39,9 @@ export default function Productos() {
     async function cargar() {
       try {
         const datos = await obtenerLotes()
-        if (montado) setLotes(datos && datos.length > 0 ? datos : LOTES_INICIALES)
+        if (montado) setLotes(datos)
       } catch {
-        if (montado) setLotes(LOTES_INICIALES)
+        if (montado) setLotes([])
       } finally {
         if (montado) setCargando(false)
       }
@@ -114,13 +114,13 @@ export default function Productos() {
   // Abrir modal de bloqueo / liberación (RF09)
   const abrirModalEstado = (lote, accionSugerida) => {
     setLoteParaCambioEstado(lote)
-    setNuevoEstadoSeleccionado(accionSugerida || (lote.estado === 'Bloqueado' ? 'Liberado' : 'Bloqueado'))
+    setNuevoEstadoSeleccionado(accionSugerida || (lote.estado.toUpperCase() === 'BLOQUEADO' ? 'Liberado' : 'Bloqueado'))
     setMotivoCambio('')
     setErrorMotivo('')
   }
 
   // Confirmar cambio de estado (RF09 y Caso Incidencia Hora 12)
-  const handleConfirmarEstado = (e) => {
+  const handleConfirmarEstado = async (e) => {
     e.preventDefault()
     setErrorMotivo('')
 
@@ -132,6 +132,12 @@ export default function Productos() {
     const loteAfectado = loteParaCambioEstado
     const estadoPrevio = loteAfectado.estado
     const nuevoEstado = nuevoEstadoSeleccionado
+    try {
+      await cambiarEstadoLote(loteAfectado.id, nuevoEstado, motivoCambio.trim())
+    } catch (error) {
+      setErrorMotivo(error.message)
+      return
+    }
     const fechaActual = new Date().toISOString().replace('T', ' ').substring(0, 16)
 
     const nuevaLista = lotes.map((item) => {
@@ -179,7 +185,7 @@ export default function Productos() {
       {mensajeToast && (
         <div
           role="status"
-          className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl shadow-2xl border text-sm flex items-center gap-3 toast-enter ${
+          className={`fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 z-50 px-4 py-3 rounded-xl shadow-2xl border text-sm flex items-center gap-3 toast-enter ${
             mensajeToast.tipo === 'error'
               ? 'bg-red-50 text-peligro-600 border-red-300'
               : 'bg-cacao-900 text-cacao-50 border-cacao-700'
@@ -195,7 +201,7 @@ export default function Productos() {
       {/* Header */}
       <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b border-cacao-200">
         <div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
             <h1 className="font-display text-2xl md:text-3xl font-bold text-cacao-950 tracking-tight">
               Gestión de Lotes, Trazabilidad y Calidad
             </h1>
@@ -269,7 +275,7 @@ export default function Productos() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Buscar */}
           <div>
             <label className="block text-[11px] font-bold text-cacao-800 uppercase tracking-wide mb-1">
@@ -474,11 +480,11 @@ export default function Productos() {
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-cacao-950/60 backdrop-blur-xs overflow-y-auto"
+          className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-2 sm:p-4 bg-cacao-950/60 backdrop-blur-xs overflow-y-auto"
         >
-          <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-cacao-200 overflow-hidden my-8">
+          <div className="relative w-full max-w-lg max-h-[94dvh] overflow-y-auto bg-white rounded-2xl shadow-2xl border border-cacao-200 my-auto">
             <div
-              className={`flex items-center justify-between px-6 py-4 text-white ${
+              className={`flex items-center justify-between gap-2 px-3 sm:px-6 py-3 sm:py-4 text-white ${
                 nuevoEstadoSeleccionado === 'Bloqueado' ? 'bg-peligro-600' : 'bg-emerald-800'
               }`}
             >
@@ -504,7 +510,7 @@ export default function Productos() {
               </button>
             </div>
 
-            <form onSubmit={handleConfirmarEstado} className="p-6 bg-[#FDF8F5] space-y-4">
+            <form onSubmit={handleConfirmarEstado} className="p-3 sm:p-6 bg-[#FDF8F5] space-y-4">
               {errorMotivo && (
                 <div className="p-3 bg-red-50 border border-red-300 rounded-lg text-xs text-peligro-600 font-semibold flex items-center gap-2">
                   <IconAlert className="w-3.5 h-3.5" /> {errorMotivo}

@@ -1,12 +1,11 @@
 import { createContext, useCallback, useEffect, useMemo, useState } from "react";
-import { supabase } from "../lib/supabase";
-import { MODO_DEMO } from "../lib/demo";
 import {
   cerrarSesion,
+  haySesion,
   iniciarSesion,
-  leerSesionDemo,
   obtenerPerfil,
 } from "../services/authService";
+import { clearToken } from "../services/api";
 
 export const AuthContext = createContext(null);
 
@@ -16,28 +15,25 @@ export function AuthProvider({ children }) {
 
   // Restaura la sesión al recargar la página
   useEffect(() => {
-    if (MODO_DEMO) {
-      setUsuario(leerSesionDemo());
+    const onUnauthorized = () => setUsuario(null);
+    window.addEventListener("kaotrace:unauthorized", onUnauthorized);
+    if (!haySesion()) {
       setCargando(false);
-      return;
+      return () => window.removeEventListener("kaotrace:unauthorized", onUnauthorized);
     }
 
     let activo = true;
-    supabase.auth.getSession().then(async ({ data }) => {
-      try {
-        if (data.session && activo) setUsuario(await obtenerPerfil(data.session.user.email));
-      } catch {
-        if (activo) setUsuario(null);
-      } finally {
-        if (activo) setCargando(false);
-      }
-    });
-    const { data: sub } = supabase.auth.onAuthStateChange((evento) => {
-      if (evento === "SIGNED_OUT") setUsuario(null);
+    obtenerPerfil().then((perfil) => {
+      if (activo) setUsuario(perfil);
+    }).catch(() => {
+      clearToken();
+      if (activo) setUsuario(null);
+    }).finally(() => {
+      if (activo) setCargando(false);
     });
     return () => {
       activo = false;
-      sub.subscription.unsubscribe();
+      window.removeEventListener("kaotrace:unauthorized", onUnauthorized);
     };
   }, []);
 

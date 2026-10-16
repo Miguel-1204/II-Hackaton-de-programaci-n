@@ -1,24 +1,33 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { obtenerAlertasAdmin } from '../../services/adminService'
+import { obtenerAlertasPersistidas } from '../../services/adminService'
 import { IconAlert, IconSearch, IconEye, IconCheck } from '../../component/Icons'
 
 const TIPOS_ALERTAS = ['Todas', 'Merma', 'Costo', 'Registro Incompleto', 'Retraso']
 
 export default function Alertas() {
-  const [alertas] = useState(() => obtenerAlertasAdmin())
+  const [alertas, setAlertas] = useState([])
+  const [cargando, setCargando] = useState(true)
+  const [error, setError] = useState('')
   const [filtroTipo, setFiltroTipo] = useState('Todas')
   const [busqueda, setBusqueda] = useState('')
+
+  useEffect(() => {
+    obtenerAlertasPersistidas()
+      .then(setAlertas)
+      .catch((err) => setError(err.message || 'No se pudieron cargar las alertas.'))
+      .finally(() => setCargando(false))
+  }, [])
 
   const alertasFiltradas = useMemo(() => {
     return alertas.filter((a) => {
       const matchTipo = filtroTipo === 'Todas' || a.tipo.toLowerCase() === filtroTipo.toLowerCase()
       const matchBusqueda =
         !busqueda ||
-        a.lote.toLowerCase().includes(busqueda.toLowerCase()) ||
-        a.causa.toLowerCase().includes(busqueda.toLowerCase()) ||
-        a.regla.toLowerCase().includes(busqueda.toLowerCase()) ||
-        a.etapa.toLowerCase().includes(busqueda.toLowerCase())
+        String(a.lote || '').toLowerCase().includes(busqueda.toLowerCase()) ||
+        String(a.causa || '').toLowerCase().includes(busqueda.toLowerCase()) ||
+        String(a.regla || '').toLowerCase().includes(busqueda.toLowerCase()) ||
+        String(a.etapa || '').toLowerCase().includes(busqueda.toLowerCase())
 
       return matchTipo && matchBusqueda
     })
@@ -95,7 +104,15 @@ export default function Alertas() {
 
       {/* Lista de Alertas Detallada (RF04) */}
       <section className="space-y-4">
-        {alertasFiltradas.length === 0 ? (
+        {cargando ? (
+          <div role="status" className="p-8 text-center bg-white rounded-2xl border border-cacao-200">
+            Cargando alertas abiertas…
+          </div>
+        ) : error ? (
+          <div role="alert" className="p-8 text-center text-peligro-600 bg-white rounded-2xl border border-red-200">
+            {error}
+          </div>
+        ) : alertasFiltradas.length === 0 ? (
           <div className="p-8 text-center bg-white rounded-2xl border border-cacao-200">
             <IconCheck className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
             <p className="text-sm font-bold text-cacao-900">No hay alertas con estos filtros</p>

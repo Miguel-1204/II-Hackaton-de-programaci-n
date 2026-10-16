@@ -1,5 +1,38 @@
 # Hackatón
 
+## Ejecutar frontend conectado al backend
+
+El frontend consume la API Express del backend; no usa Supabase ni modo demo
+para autenticación o inventario. Configura `Frontend/.env` a partir de
+`Frontend/.env.example` (`VITE_API_URL` y `VITE_AUTH_DOMAIN`) y configura
+`FRONTEND_ORIGIN` en `Backend/.env` con el origen donde se sirve Vite. Para
+desarrollo local los valores son `http://localhost:3000/api`, `cacao.local` y
+`http://localhost:5173`.
+
+Con PostgreSQL, migraciones y seeds del backend preparados según esta guía:
+
+```powershell
+Set-Location .\Backend
+npm ci
+npm start
+```
+
+En otra terminal:
+
+```powershell
+Set-Location .\Frontend
+npm ci
+npm start
+```
+
+Vite muestra la URL del frontend en la terminal (normalmente
+`http://localhost:5173`). `http://localhost:3000` corresponde al backend.
+
+El inicio de sesión acepta el correo registrado o el nombre de usuario; si se
+usa nombre, se añade el dominio de `VITE_AUTH_DOMAIN`. El backend firma una
+sesión JWT que el cliente valida en `/api/auth/me` al recargar. Para desplegar,
+usa HTTPS y establece `VITE_API_URL` y `FRONTEND_ORIGIN` con los dominios reales.
+
 ## Docker
 
 Requisitos: Docker Desktop con Docker Compose habilitado. Configura las
@@ -229,8 +262,9 @@ permanecen en el historial de estados; este módulo no acepta ni inventa
 observaciones de recepción porque el esquema actual no tiene un campo para
 almacenarlas.
 
-Los cambios de estado aceptan `RECIBIDO`, `PENDIENTE`, `DISPONIBLE`,
-`LIBERADO` o `BLOQUEADO`, preservando los valores ya usados por el proyecto.
+Los lotes usan los estados `PENDIENTE`, `LIBERADO` y `BLOQUEADO`. Una recepción
+nueva inicia en `PENDIENTE`; las migraciones convierten los valores históricos
+`RECIBIDO` a `PENDIENTE` y `DISPONIBLE` a `LIBERADO`.
 El estado comercial público se deriva de los lotes asociados al producto:
 cualquier lote bloqueado bloquea la ficha; solo lotes liberados/disponibles
 permiten ofrecerlo; en los demás casos aparece como pendiente. No se añadió un
@@ -345,7 +379,7 @@ usa como nombre del productor. Se conservan los municipios y cantidades
 indicados: Rivera, 100 kg; Campoalegre, 150 kg; Algeciras, 80 kg.
 
 Los lotes se crean con fecha de recepción del día de la carga y estado
-`RECIBIDO`; el producto queda sin asignar porque no se proporcionó un catálogo
+`PENDIENTE`; el producto queda sin asignar porque no se proporcionó un catálogo
 de productos. Por cada lote creado se registra en la misma transacción un
 movimiento `ENTRADA` por la cantidad recibida, atribuido al administrador. Si
 ya existe un productor o lote con esos identificadores, el seed no lo modifica

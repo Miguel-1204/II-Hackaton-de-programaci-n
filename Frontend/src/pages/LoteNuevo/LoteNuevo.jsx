@@ -153,7 +153,7 @@ export default function LoteNuevo() {
     <div className="mx-auto max-w-2xl px-4 py-8">
       <h1 className="font-display text-2xl font-semibold text-cacao-800">Recibir lote</h1>
       <p className="mt-1 text-cacao-700">
-        Registra la entrada de un lote de cacao. Quedará con estado «recibido» y su
+        Registra la entrada de un lote de cacao. Quedará con estado «pendiente» y su
         cantidad disponible en inventario.
       </p>
 

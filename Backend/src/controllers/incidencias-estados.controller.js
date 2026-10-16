@@ -19,6 +19,15 @@ function createIncidenciasEstadosController(incidenciasEstadosService) {
   }
 
   return {
+    async getCriticalOpenCount(request, response, next) {
+      try {
+        const total = await incidenciasEstadosService.getCriticalOpenCount()
+        return response.status(200).json({ total })
+      } catch (error) {
+        return next(error)
+      }
+    },
+
     /**
      * Registra una nueva incidencia operativa o de calidad.
      *

@@ -22,6 +22,12 @@ function createReportesRouter({ controller, authenticate }) {
     requireRoles('ADMINISTRADOR'),
     controller.descargarReporteMermaPdf,
   )
+  router.post(
+    '/balance-productos/pdf',
+    authenticate,
+    requireRoles('ADMINISTRADOR'),
+    controller.descargarBalanceProductosPdf,
+  )
   router.get(
     '/inventario.csv',
     authenticate,

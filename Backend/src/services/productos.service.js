@@ -51,6 +51,10 @@ function createProductosService({ productosModel, transformacionesModel }) {
       return await productosModel.list()
     },
 
+    async listProductosPublicos() {
+      return await productosModel.listPublic()
+    },
+
     /**
      * Obtiene un producto por su identificador único.
      *

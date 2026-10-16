@@ -40,6 +40,41 @@
   opacity: 1;
 }
 
+.cacaos-product-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.35s ease;
+}
+
+.cacaos-card:hover .cacaos-product-image {
+  transform: scale(1.04);
+}
+
+.cacaos-availability {
+  position: absolute;
+  z-index: 2;
+  top: 0.875rem;
+  right: 0.875rem;
+  border-radius: 9999px;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(31, 16, 10, 0.2);
+}
+
+.cacaos-availability.is-available {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.cacaos-availability.is-unavailable {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
 /* ====== Modal: efecto de volteo (flip) ====== */
 .flip-inner {
   position: relative;

@@ -1,18 +1,23 @@
-import { supabase } from "../lib/supabase";
-import { MODO_DEMO, INVENTARIO_DEMO, MERMAS_DEMO } from "../lib/demo";
+import { obtenerLotes } from './lotesService'
+import { api } from './api'
+
+export async function obtenerConteoAlertasCriticas() {
+  const result = await api('/incidencias/resumen/criticas')
+  return Number(result.total || 0)
+}
 
 export async function obtenerResumenOperador() {
-  if (MODO_DEMO) {
-    return { inventario: INVENTARIO_DEMO, mermas: MERMAS_DEMO };
-  }
-
-  const [inventario, mermas] = await Promise.all([
-    supabase.from("v_inventario_lotes").select("*").order("codigo"),
-    supabase.from("v_mermas").select("*").order("fecha", { ascending: false }),
-  ]);
-
-  if (inventario.error || mermas.error) {
-    throw new Error("No se pudo cargar el resumen. Revisa tu conexión e intenta de nuevo.");
-  }
-  return { inventario: inventario.data, mermas: mermas.data };
+  const [inventario, transformaciones] = await Promise.all([
+    obtenerLotes(),
+    api('/transformaciones?limit=100'),
+  ])
+  const mermas = (transformaciones.items || []).map((item) => ({
+    id: item.id,
+    codigo: item.codigo,
+    etapa: item.etapa,
+    fecha: item.fechaProcesamiento,
+    merma_pct: item.analiticaMerma?.mermaPorcentaje ?? item.analiticaMerma?.merma_porcentaje,
+    alerta: Boolean(item.analiticaMerma?.superaUmbral ?? item.analiticaMerma?.supera_umbral),
+  }))
+  return { inventario, mermas }
 }

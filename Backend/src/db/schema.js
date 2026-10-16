@@ -67,6 +67,7 @@ const productos = pgTable('productos', {
   codigo: varchar('codigo', { length: 100 }).notNull().unique(),
   nombre: varchar('nombre', { length: 200 }).notNull(),
   descripcion: text('descripcion'),
+  imagenUrl: varchar('imagen_url', { length: 500 }),
   precioReferencia: numeric('precio_referencia', { precision: 14, scale: 2 }),
   unidadComercial: varchar('unidad_comercial', { length: 50 }),
   creadoEn: createdAt('creado_en'),
@@ -89,7 +90,7 @@ const lotes = pgTable(
     }).notNull(),
     unidad: varchar('unidad', { length: 50 }).notNull(),
     tipoMaterial: varchar('tipo_material', { length: 150 }),
-    estado: varchar('estado', { length: 50 }).notNull().default('RECIBIDO'),
+    estado: varchar('estado', { length: 50 }).notNull().default('PENDIENTE'),
     creadoEn: createdAt('creado_en'),
   },
   (table) => [
@@ -99,6 +100,10 @@ const lotes = pgTable(
     check(
       'lotes_unidad_no_vacia_check',
       sql`length(btrim(${table.unidad})) > 0`,
+    ),
+    check(
+      'lotes_estado_check',
+      sql`${table.estado} in ('PENDIENTE', 'LIBERADO', 'BLOQUEADO')`,
     ),
   ],
 )

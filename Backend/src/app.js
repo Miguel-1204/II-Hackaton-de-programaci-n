@@ -152,20 +152,32 @@ function createApp({
       ? createEstadisticasService({ estadisticasModel })
       : null)
 
-  const resolvedReportesService =
-    reportesService ||
-    (estadisticasModel
-      ? createReportesService({ estadisticasModel, lotesModel })
-      : null)
-
   const resolvedNlpService =
     nlpService ||
     (estadisticasModel
       ? createNlpService({ estadisticasModel })
       : null)
 
+  const resolvedReportesService =
+    reportesService ||
+    (estadisticasModel
+      ? createReportesService({ estadisticasModel, lotesModel, nlpService: resolvedNlpService })
+      : null)
+
   // Middlewares globales
-  app.use(cors())
+  const allowedOrigins = (process.env.FRONTEND_ORIGIN || 'http://localhost:5173')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+  app.use(cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) return callback(null, true)
+      return callback(new Error('Origen no permitido por la política CORS'))
+    },
+    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key'],
+    maxAge: 600,
+  }))
   app.use(express.json({ limit: '64kb' }))
 
   // Healthcheck

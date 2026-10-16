@@ -98,11 +98,11 @@ function validateCreateTransformacionBody(body) {
     if (!item || typeof item !== 'object') {
       return { error: `El elemento en lotesSalida[${i}] debe ser un objeto` }
     }
-    const loteId = Number(item.loteId)
+    const loteId = item.loteId === undefined ? null : Number(item.loteId)
     const cantidad = Number(item.cantidad)
     const unidad = typeof item.unidad === 'string' ? item.unidad.trim() : ''
 
-    if (!Number.isSafeInteger(loteId) || loteId <= 0) {
+    if (loteId !== null && (!Number.isSafeInteger(loteId) || loteId <= 0)) {
       return { error: `lotesSalida[${i}].loteId debe ser un ID numérico entero positivo` }
     }
     if (!Number.isFinite(cantidad) || cantidad <= 0) {
@@ -118,7 +118,7 @@ function validateCreateTransformacionBody(body) {
       return { error: `lotesSalida[${i}].unidad debe ser comparable en masa (kg, g o t)` }
     }
   }
-  if (new Set(lotesSalida.map((item) => Number(item.loteId))).size !== lotesSalida.length) {
+  if (new Set(lotesSalida.filter((item) => item.loteId !== undefined).map((item) => Number(item.loteId))).size !== lotesSalida.filter((item) => item.loteId !== undefined).length) {
     return { error: 'Cada lote puede aparecer una sola vez en lotesSalida' }
   }
 
@@ -168,7 +168,7 @@ function validateCreateTransformacionBody(body) {
         unidad: item.unidad.trim().toLowerCase(),
       })),
       lotesSalida: lotesSalida.map((item) => ({
-        loteId: Number(item.loteId),
+        loteId: item.loteId === undefined ? undefined : Number(item.loteId),
         cantidad: Number(item.cantidad),
         unidad: item.unidad.trim().toLowerCase(),
       })),

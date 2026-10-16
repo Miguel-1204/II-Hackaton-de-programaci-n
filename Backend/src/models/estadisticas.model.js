@@ -199,6 +199,64 @@ function createEstadisticasModel(db) {
     },
 
     /**
+     * Balance de inventario agregado por producto comercial. Solo suma saldos
+     * evaluables de lotes liberados o pendientes; los bloqueados no están disponibles.
+     */
+    async getBalanceProductos() {
+      const rows = await db.execute(sql`
+        WITH lotes_por_producto AS (
+          SELECT
+            l.producto_id,
+            count(DISTINCT l.id) AS total_lotes,
+            coalesce(sum(cantidad_a_kg(l.cantidad_recibida, l.unidad)), 0) AS cantidad_registrada_kg,
+            coalesce(sum(ail.saldo_inventario_kg) FILTER (
+              WHERE l.estado IN ('PENDIENTE', 'LIBERADO')
+                AND ail.estado_evaluacion = 'EVALUABLE'
+            ), 0) AS disponible_kg
+          FROM lotes l
+          LEFT JOIN analitica_inventario_lotes ail ON ail.lote_id = l.id
+          WHERE l.producto_id IS NOT NULL
+          GROUP BY l.producto_id
+        ),
+        salidas_por_producto AS (
+          SELECT l.producto_id, coalesce(sum(cantidad_a_kg(mi.cantidad, mi.unidad)), 0) AS consumido_kg
+          FROM movimientos_inventario mi
+          JOIN lotes l ON l.id = mi.lote_id
+          WHERE mi.tipo_movimiento = 'SALIDA'
+            AND cantidad_a_kg(mi.cantidad, mi.unidad) IS NOT NULL
+            AND l.producto_id IS NOT NULL
+          GROUP BY l.producto_id
+        )
+        SELECT
+          p.id AS producto_id,
+          p.codigo AS producto_codigo,
+          p.nombre AS producto_nombre,
+          p.precio_referencia,
+          p.unidad_comercial,
+          coalesce(lp.total_lotes, 0) AS total_lotes,
+          coalesce(lp.cantidad_registrada_kg, 0) AS cantidad_registrada_kg,
+          coalesce(sp.consumido_kg, 0) AS consumido_kg,
+          coalesce(lp.disponible_kg, 0) AS disponible_kg
+        FROM productos p
+        LEFT JOIN lotes_por_producto lp ON lp.producto_id = p.id
+        LEFT JOIN salidas_por_producto sp ON sp.producto_id = p.id
+        ORDER BY p.nombre
+      `)
+
+      return (rows || []).map((row) => ({
+        productoId: Number(row.producto_id),
+        codigo: row.producto_codigo,
+        producto: row.producto_nombre,
+        lotes: Number(row.total_lotes || 0),
+        cantidadRegistradaKg: Number(row.cantidad_registrada_kg || 0),
+        consumidoKg: Number(row.consumido_kg || 0),
+        disponibleKg: Number(row.disponible_kg || 0),
+        precioReferencia: row.precio_referencia == null ? null : Number(row.precio_referencia),
+        unidadComercial: row.unidad_comercial || null,
+      }))
+    },
+
+    /**
      * Obtiene la relación de lotes con estados de bloqueo e incidencias desde 'analitica_estado_lotes'.
      *
      * @returns {Promise<Array<Object>>}

@@ -10,6 +10,7 @@
   flex-direction: column;
   width: 14rem;
   flex-shrink: 0;
+  overflow-y: auto;
   background: var(--color-cacao-900);
   color: var(--color-cacao-50);
 }
@@ -76,6 +77,7 @@
     position: sticky;
     top: 0;
     height: 100vh;
+    height: 100dvh;
   }
   /* Todo lo exclusivo de móvil se oculta aquí */
   .panel-movil,

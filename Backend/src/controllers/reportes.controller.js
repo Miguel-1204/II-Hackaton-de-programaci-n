@@ -3,6 +3,7 @@
  */
 
 const { validateEstadisticasQuery } = require('../validators/estadisticas.validator')
+const { validateNlpQueryBody } = require('../validators/nlp.validator')
 
 /**
  * Factoría que instancia el controlador de reportes PDF.
@@ -47,6 +48,23 @@ function createReportesController(reportesService) {
       }
     },
 
+    async descargarBalanceProductosPdf(request, response, next) {
+      const validation = validateNlpQueryBody(request.body)
+      if (validation.error) return response.status(400).json({ error: validation.error })
+      try {
+        const pdfBuffer = await reportesService.generateBalanceProductosPdf(validation.value.pregunta, {
+          solicitante: request.user?.nombre || 'Administrador Kaotrace',
+        })
+        response.setHeader('Content-Type', 'application/pdf')
+        response.setHeader('Content-Disposition', `attachment; filename="balance-productos-kaotrace-${Date.now()}.pdf"`)
+        response.setHeader('Content-Length', pdfBuffer.length)
+        return response.status(200).send(pdfBuffer)
+      } catch (error) {
+        if (error.status === 400) return response.status(400).json({ error: error.message })
+        return next(error)
+      }
+    },
+
     async descargarInventarioCsv(request, response, next) {
       const municipio = request.query.municipio
       const estado = request.query.estado
@@ -57,7 +75,7 @@ function createReportesController(reportesService) {
       )) {
         return response.status(400).json({ error: 'municipio debe ser texto de hasta 150 caracteres' })
       }
-      const allowedStates = ['RECIBIDO', 'PENDIENTE', 'DISPONIBLE', 'LIBERADO', 'BLOQUEADO']
+      const allowedStates = ['PENDIENTE', 'LIBERADO', 'BLOQUEADO']
       if (
         estado !== undefined &&
         (typeof estado !== 'string' || !allowedStates.includes(estado.trim().toUpperCase()))
