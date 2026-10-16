@@ -451,3 +451,12 @@ ni lo duplica.
   privacidad, estado bloqueado y CSV real en PostgreSQL. Falla si la consulta
   supera 3 segundos en el entorno donde se ejecuta.
 - `npm test`: ejecutar las pruebas automatizadas del backend.
+
+## Credenciales de ingreso Operador y Administrador:
+Operador
+User: juanpablo@example.com
+password: operador123
+
+Administrador
+User: admin@example.com
+password: admin123
