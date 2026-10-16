@@ -452,7 +452,15 @@ describe('Kaotrace - Tarea 6, 7 y 8: Estadísticas, Reportes PDF e Intérprete N
     const renderedHex = [...pdfText.matchAll(/<([0-9a-f]+)>/gi)]
       .map((match) => match[1])
       .join('')
-    for (const expected of ['CAC001', 'CAC002', 'EVALUABLE', '15', '125']) {
+    for (const expected of [
+      'CAC001',
+      'CAC002',
+      'EVALUABLE',
+      '15',
+      '125',
+      'Visualizacion comparativa por Transformacion',
+      'Merma (%)',
+    ]) {
       assert.ok(
         renderedHex.includes(Buffer.from(expected, 'latin1').toString('hex')),
         `El PDF debe contener ${expected}`,
@@ -480,6 +488,25 @@ describe('Kaotrace - Tarea 6, 7 y 8: Estadísticas, Reportes PDF e Intérprete N
     const pdf = await reportesService.generateConsultaPdf('ventas del mes', { solicitante: 'Admin Test' })
     assert.ok(Buffer.isBuffer(pdf))
     assert.equal(pdf.subarray(0, 5).toString('utf8'), '%PDF-')
+    const pdfText = [...pdf.toString('latin1').matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)]
+      .map((match) => {
+        const bytes = Buffer.from(match[1], 'latin1')
+        try {
+          return inflateSync(bytes).toString('latin1')
+        } catch {
+          return bytes.toString('latin1')
+        }
+      })
+      .join('\n')
+    const renderedHex = [...pdfText.matchAll(/<([0-9a-f]+)>/gi)]
+      .map((match) => match[1])
+      .join('')
+    for (const expected of ['Visualizacion comparativa por Lote', 'Cantidad (kg)', 'Ingresos (COP)']) {
+      assert.ok(
+        renderedHex.includes(Buffer.from(expected, 'latin1').toString('hex')),
+        `El PDF debe incluir el gráfico con ${expected}`,
+      )
+    }
   })
 
   it('el intérprete NLP identifica intenciones, extrae municipios del Huila y responde en lenguaje natural', async () => {

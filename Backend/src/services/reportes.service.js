@@ -5,6 +5,220 @@
 
 const PDFDocument = require('pdfkit')
 
+const REPORT_METRIC_LABELS = {
+  cantidadKg: 'Cantidad (kg)',
+  cantidad_kg: 'Cantidad (kg)',
+  cantidadRegistradaKg: 'Registrado (kg)',
+  consumidoKg: 'Salidas (kg)',
+  disponibleKg: 'Disponible (kg)',
+  entrada_kg: 'Entrada (kg)',
+  salida_kg: 'Salida (kg)',
+  merma_kg: 'Merma (kg)',
+  merma_porcentaje: 'Merma (%)',
+  mermaPromedioPorcentaje: 'Merma promedio (%)',
+  totalCop: 'Ingresos (COP)',
+  ingresosCop: 'Ingresos (COP)',
+  costo_total: 'Costo total',
+  costoCOP: 'Costo (COP)',
+  costoCOPKg: 'Costo por kg (COP)',
+  transformacionesEvaluadas: 'Transformaciones',
+  totalVentas: 'Ventas',
+  lotes: 'Lotes',
+}
+
+const REPORT_CATEGORY_LABELS = {
+  producto: 'Producto',
+  loteCodigo: 'Lote',
+  lote_codigo: 'Lote',
+  transformacion_codigo: 'Transformacion',
+  productor_nombre: 'Productor',
+  municipio: 'Municipio',
+  moneda: 'Moneda',
+  codigo: 'Codigo',
+  fechaVenta: 'Fecha',
+  fecha_venta: 'Fecha',
+}
+
+const METRIC_PRIORITY = [
+  'disponibleKg',
+  'merma_porcentaje',
+  'mermaPromedioPorcentaje',
+  'totalCop',
+  'ingresosCop',
+  'costo_total',
+  'costoCOPKg',
+  'costoCOP',
+  'cantidadKg',
+  'cantidad_kg',
+  'entrada_kg',
+  'salida_kg',
+  'cantidadRegistradaKg',
+  'consumidoKg',
+  'merma_kg',
+  'transformacionesEvaluadas',
+  'totalVentas',
+  'lotes',
+]
+
+function metricGroup(key) {
+  if (/porcentaje/i.test(key)) return 'porcentaje'
+  if (/cop|costo|ingreso|precio|valor/i.test(key)) return 'dinero'
+  if (/_kg$|kg$/i.test(key)) return 'peso'
+  return 'conteo'
+}
+
+function metricLabel(key) {
+  return REPORT_METRIC_LABELS[key] || key.replace(/([A-Z])/g, ' $1').replaceAll('_', ' ')
+}
+
+function buildComparativeCharts(rows) {
+  if (!rows.length) return []
+
+  const categoryKey = [
+    'producto',
+    'loteCodigo',
+    'lote_codigo',
+    'transformacion_codigo',
+    'productor_nombre',
+    'municipio',
+    'codigo',
+    'fechaVenta',
+    'fecha_venta',
+    'tipo',
+  ].find((key) => rows.some((row) => typeof row[key] === 'string' && row[key].trim()))
+    || Object.keys(rows[0]).find((key) =>
+      !/^(id|.*_id)$/i.test(key) && rows.some((row) => typeof row[key] === 'string' && row[key].trim()),
+    )
+
+  if (!categoryKey) return []
+
+  const metricKeys = Object.keys(rows[0]).filter((key) =>
+    !/^(id|.*_id)$/i.test(key) &&
+    rows.some((row) => typeof row[key] === 'number' && Number.isFinite(row[key])),
+  )
+  const groupNames = [...new Set(metricKeys.map(metricGroup))]
+    .sort((left, right) => {
+      const priority = (group) => Math.min(...metricKeys
+        .filter((key) => metricGroup(key) === group)
+        .map((key) => {
+          const index = METRIC_PRIORITY.indexOf(key)
+          return index < 0 ? METRIC_PRIORITY.length : index
+        }))
+      return priority(left) - priority(right)
+    })
+
+  return groupNames.slice(0, 3).flatMap((group) => {
+    const metrics = metricKeys
+      .filter((key) => metricGroup(key) === group)
+      .sort((left, right) => {
+        const leftIndex = METRIC_PRIORITY.indexOf(left)
+        const rightIndex = METRIC_PRIORITY.indexOf(right)
+        return (leftIndex < 0 ? METRIC_PRIORITY.length : leftIndex) -
+          (rightIndex < 0 ? METRIC_PRIORITY.length : rightIndex)
+      })
+      .slice(0, 3)
+    const aggregated = new Map()
+    for (const row of rows) {
+      const rawLabel = row[categoryKey]
+      if (rawLabel === null || rawLabel === undefined || String(rawLabel).trim() === '') continue
+      const label = String(rawLabel)
+      const values = aggregated.get(label) || Object.fromEntries(metrics.map((key) => [key, []]))
+      for (const key of metrics) {
+        if (typeof row[key] === 'number' && Number.isFinite(row[key])) values[key].push(row[key])
+      }
+      aggregated.set(label, values)
+    }
+
+    const chartRows = [...aggregated].map(([label, values]) => ({
+      label,
+      values: Object.fromEntries(metrics.map((key) => {
+        const items = values[key]
+        const average = group === 'porcentaje' || /promedio/i.test(key)
+        const total = items.reduce((sum, value) => sum + value, 0)
+        return [key, items.length ? (average ? total / items.length : total) : 0]
+      })),
+    }))
+    const primaryMetric = metrics[0]
+    chartRows.sort((left, right) => right.values[primaryMetric] - left.values[primaryMetric])
+    const visibleRows = chartRows.slice(0, 8)
+    if (!visibleRows.length || !visibleRows.some((row) => metrics.some((key) => row.values[key] !== 0))) {
+      return []
+    }
+
+    return [{
+      categoryLabel: REPORT_CATEGORY_LABELS[categoryKey] || categoryKey.replace(/([A-Z])/g, ' $1').replaceAll('_', ' '),
+      metrics,
+      rows: visibleRows,
+    }]
+  })
+}
+
+function drawComparativeChart(doc, chart, startY) {
+  const palette = ['#087f5b', '#b36b22', '#4c6faf']
+  const rowHeight = chart.metrics.length * 13 + 8
+  const height = 48 + chart.rows.length * rowHeight + 10
+  let y = startY
+  if (y + height > 720) {
+    doc.addPage()
+    y = 45
+  }
+
+  const left = 40
+  const width = 532
+  doc.rect(left, y, width, height).fillAndStroke('#fffdfa', '#d4c7b8')
+  doc.fillColor('#2c1810').font('Helvetica-Bold').fontSize(10)
+    .text(`Visualizacion comparativa por ${chart.categoryLabel}`, left + 10, y + 9, { width: width - 20 })
+
+  let legendX = left + 10
+  const legendY = y + 29
+  chart.metrics.forEach((key, index) => {
+    doc.rect(legendX, legendY + 1, 8, 8).fill(palette[index % palette.length])
+    doc.fillColor('#444444').font('Helvetica').fontSize(7)
+      .text(metricLabel(key), legendX + 12, legendY, { width: 145, lineBreak: false, ellipsis: true })
+    legendX += 165
+  })
+
+  const labelX = left + 10
+  const barX = left + 128
+  const barWidth = 270
+  const valueX = barX + barWidth + 8
+  const maximum = Math.max(
+    ...chart.rows.flatMap((row) => chart.metrics.map((key) => Math.abs(row.values[key]))),
+    0,
+  )
+  let rowY = y + 45
+  doc.font('Helvetica').fontSize(7)
+  for (const row of chart.rows) {
+    doc.fillColor('#333333').text(row.label, labelX, rowY + 1, {
+      width: 112,
+      lineBreak: false,
+      ellipsis: true,
+    })
+    chart.metrics.forEach((key, index) => {
+      const value = row.values[key]
+      const barY = rowY + index * 13
+      doc.rect(barX, barY + 2, barWidth, 7).fill('#eee8e1')
+      if (maximum > 0 && value !== 0) {
+        doc.rect(barX, barY + 2, Math.max((Math.abs(value) / maximum) * barWidth, 2), 7)
+          .fill(palette[index % palette.length])
+      }
+      doc.fillColor('#333333').font('Helvetica').fontSize(7)
+        .text(value.toLocaleString('es-CO', { maximumFractionDigits: 2 }), valueX, barY, {
+          width: 115,
+          lineBreak: false,
+          ellipsis: true,
+        })
+    })
+    rowY += rowHeight
+  }
+
+  if (chart.rows.length > 1 && chart.rows.length === 8) {
+    doc.fillColor('#666666').font('Helvetica').fontSize(7)
+      .text('Se muestran hasta 8 categorias con mayor valor.', left + 10, y + height - 13)
+  }
+  return y + height + 12
+}
+
 /**
  * Factoría que instancia el servicio de generación de reportes en PDF.
  *
@@ -103,6 +317,9 @@ function createReportesService({ estadisticasModel, lotesModel, nlpService }) {
 
           // 4. Tabla de Detalle por Productor
           let tableY = startY + 60
+          for (const chart of buildComparativeCharts(dataRows)) {
+            tableY = drawComparativeChart(doc, chart, tableY)
+          }
           doc.fillColor('#2c1810').fontSize(11).font('Helvetica-Bold')
             .text('DETALLE DE TRANSFORMACIONES Y EVALUACIÓN DE MERMA POR PRODUCTOR', 40, tableY)
 
@@ -342,6 +559,7 @@ function createReportesService({ estadisticasModel, lotesModel, nlpService }) {
       const summary = !Array.isArray(values) && typeof values === 'object'
         ? Object.entries(values).filter(([, value]) => !Array.isArray(value) && (value === null || typeof value !== 'object'))
         : []
+      const charts = buildComparativeCharts(rows)
 
       return new Promise((resolve, reject) => {
         try {
@@ -382,6 +600,10 @@ function createReportesService({ estadisticasModel, lotesModel, nlpService }) {
               y = doc.y + 3
             }
             y += 12
+          }
+
+          for (const chart of charts) {
+            y = drawComparativeChart(doc, chart, y)
           }
 
           if (columns.length) {
