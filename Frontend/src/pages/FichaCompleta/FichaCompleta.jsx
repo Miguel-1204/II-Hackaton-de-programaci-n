@@ -115,25 +115,7 @@ export default function FichaCompleta() {
               <p className="text-cacao-700"><strong>Disponibilidad:</strong> {comercial.disponible ? "Sí" : "No"} ({comercial.stock})</p>
             </div>
           </div>
-        </section>
-
-        {/* CTA */}
-        <section className="mb-8">
-          <div className="bg-cacao-800 p-8 rounded-xl text-white text-center">
-            <h2 className="font-display text-2xl font-bold mb-6">¿Interesado en este producto?</h2>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <button className="flex-1 px-6 py-3 rounded-lg bg-white text-cacao-800 font-bold hover:bg-cacao-100 transition-colors">
-                Solicitar cotización
-              </button>
-              <button className="flex-1 px-6 py-3 rounded-lg border-2 border-white text-white font-bold hover:bg-white/10 transition-colors">
-                Contactar a la asociación
-              </button>
-            </div>
-            <p className="mt-4 text-cacao-300 text-sm">
-              Al hacer clic, se abre un formulario o se simula un enlace a WhatsApp (MVP).
-            </p>
-          </div>
-        </section>
+        </section>  
       </main>
 
       <Footer />
