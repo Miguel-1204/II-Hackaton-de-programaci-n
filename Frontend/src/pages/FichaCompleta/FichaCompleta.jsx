@@ -117,6 +117,7 @@ export default function FichaCompleta() {
           </div>
         </section>
 
+        
       </main>
 
       <Footer />
