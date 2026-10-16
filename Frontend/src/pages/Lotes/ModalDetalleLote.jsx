@@ -1,5 +1,5 @@
 import BadgeEstado from '../../component/BadgeEstado'
-import { IconPackage, IconChart, IconAlert, IconTrendingDown, IconClipboard, IconGear } from '../../component/Icons'
+import { IconPackage, IconChart, IconAlert, IconTrendingDown, IconClipboard, IconGear, IconPin } from '../../component/Icons'
 
 const formatKg = (n) => `${Number(n ?? 0).toLocaleString('es-CO')} kg`
 const formatCop = (n) => `$ ${Number(n ?? 0).toLocaleString('es-CO')} COP`
