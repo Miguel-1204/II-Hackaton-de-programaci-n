@@ -115,7 +115,9 @@ export default function FichaCompleta() {
               <p className="text-cacao-700"><strong>Disponibilidad:</strong> {comercial.disponible ? "Sí" : "No"} ({comercial.stock})</p>
             </div>
           </div>
-        </section>  
+        </section>
+
+        
       </main>
 
       <Footer />
