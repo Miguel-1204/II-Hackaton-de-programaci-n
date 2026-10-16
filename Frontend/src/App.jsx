@@ -2,6 +2,8 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { ToastProvider } from "./context/ToastContext";
 import Home from "./pages/Home";
 import Login from "./pages/Login/Login";
+import Nosotros from "./pages/Nosotros/Nosotros";
+
 
 export default function App() {
   return (
@@ -9,6 +11,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/nosotros" element={<Nosotros />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </ToastProvider>
