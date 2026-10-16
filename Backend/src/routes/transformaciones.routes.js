@@ -3,6 +3,7 @@
  */
 
 const { Router } = require('express')
+const { requireRoles } = require('../middlewares/auth.middleware')
 
 /**
  * Crea el enrutador para los endpoints de transformaciones.
@@ -15,9 +16,10 @@ const { Router } = require('express')
 function createTransformacionesRouter({ controller, authenticate }) {
   const router = Router()
 
-  router.post('/', authenticate, controller.create)
-  router.get('/', authenticate, controller.list)
-  router.get('/:id', authenticate, controller.getById)
+  router.use(authenticate, requireRoles('ADMINISTRADOR', 'OPERADOR'))
+  router.post('/', controller.create)
+  router.get('/', controller.list)
+  router.get('/:id', controller.getById)
 
   return router
 }

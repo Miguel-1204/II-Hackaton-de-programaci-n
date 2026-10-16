@@ -84,6 +84,19 @@ function createIncidenciasEstadosService({ incidenciasEstadosModel, lotesModel }
         throw err
       }
 
+      const allowedStates = new Set([
+        'RECIBIDO',
+        'PENDIENTE',
+        'DISPONIBLE',
+        'LIBERADO',
+        'BLOQUEADO',
+      ])
+      if (!allowedStates.has(estadoNuevo)) {
+        const err = new Error('Estado de lote no permitido')
+        err.statusCode = 400
+        throw err
+      }
+
       if (lotesModel) {
         const lote = await lotesModel.findById(loteId)
         if (!lote) {

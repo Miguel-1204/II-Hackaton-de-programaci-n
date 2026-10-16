@@ -2,6 +2,8 @@
  * @fileoverview Validador de esquemas de entrada para transformaciones y participaciones de lotes.
  */
 
+const { cantidadAKg } = require('../utils/conversion')
+
 /**
  * Valida el cuerpo de la petición para registrar una nueva transformación.
  *
@@ -45,8 +47,13 @@ function validateCreateTransformacionBody(body) {
     return { error: 'El campo "estado" debe ser una cadena no vacía' }
   }
 
-  if (claveIdempotencia !== undefined && (typeof claveIdempotencia !== 'string' || !claveIdempotencia.trim())) {
-    return { error: 'Si se provee "claveIdempotencia", debe ser una cadena no vacía' }
+  if (
+    claveIdempotencia !== undefined &&
+    (typeof claveIdempotencia !== 'string' ||
+      !claveIdempotencia.trim() ||
+      claveIdempotencia.trim().length > 180)
+  ) {
+    return { error: '"claveIdempotencia" debe ser texto no vacío de hasta 180 caracteres' }
   }
 
   if (!Array.isArray(lotesEntrada) || lotesEntrada.length === 0) {
@@ -68,9 +75,18 @@ function validateCreateTransformacionBody(body) {
     if (!Number.isFinite(cantidad) || cantidad <= 0) {
       return { error: `lotesEntrada[${i}].cantidad debe ser un número estrictamente positivo` }
     }
+    if (cantidad > 99999999999.999 || Math.round(cantidad * 1000) / 1000 !== cantidad) {
+      return { error: `lotesEntrada[${i}].cantidad debe tener hasta 3 decimales y ajustarse al rango permitido` }
+    }
     if (!unidad) {
       return { error: `lotesEntrada[${i}].unidad es obligatoria` }
     }
+    if (cantidadAKg(cantidad, unidad) === null) {
+      return { error: `lotesEntrada[${i}].unidad debe ser comparable en masa (kg, g o t)` }
+    }
+  }
+  if (new Set(lotesEntrada.map((item) => Number(item.loteId))).size !== lotesEntrada.length) {
+    return { error: 'Cada lote puede aparecer una sola vez en lotesEntrada' }
   }
 
   if (!Array.isArray(lotesSalida) || lotesSalida.length === 0) {
@@ -92,9 +108,18 @@ function validateCreateTransformacionBody(body) {
     if (!Number.isFinite(cantidad) || cantidad <= 0) {
       return { error: `lotesSalida[${i}].cantidad debe ser un número estrictamente positivo` }
     }
+    if (cantidad > 99999999999.999 || Math.round(cantidad * 1000) / 1000 !== cantidad) {
+      return { error: `lotesSalida[${i}].cantidad debe tener hasta 3 decimales y ajustarse al rango permitido` }
+    }
     if (!unidad) {
       return { error: `lotesSalida[${i}].unidad es obligatoria` }
     }
+    if (cantidadAKg(cantidad, unidad) === null) {
+      return { error: `lotesSalida[${i}].unidad debe ser comparable en masa (kg, g o t)` }
+    }
+  }
+  if (new Set(lotesSalida.map((item) => Number(item.loteId))).size !== lotesSalida.length) {
+    return { error: 'Cada lote puede aparecer una sola vez en lotesSalida' }
   }
 
   const sanitizedCostos = []

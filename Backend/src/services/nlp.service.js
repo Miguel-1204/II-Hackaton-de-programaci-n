@@ -1,185 +1,255 @@
 /**
- * @fileoverview Intérprete seguro y determinista de consultas en lenguaje natural para analítica de Kaotrace.
- * Mapea intenciones sobre consultas parametrizadas de solo lectura contra las vistas analíticas de PostgreSQL.
+ * @fileoverview Intérprete determinista de consultas analíticas de solo lectura.
  */
 
 const HUILA_MUNICIPIOS = [
-  'rivera',
   'campoalegre',
   'algeciras',
-  'gigante',
-  'garzon',
   'garzón',
+  'garzon',
+  'gigante',
+  'la plata',
   'neiva',
   'palermo',
   'pitalito',
-  'la plata',
+  'rivera',
 ]
 
-/**
- * Factoría que instancia el servicio de procesamiento de lenguaje natural (NLP) seguro.
- *
- * @param {Object} dependencies - Dependencias inyectadas.
- * @param {Object} dependencies.estadisticasModel - Modelo de estadísticas sobre vistas analíticas.
- * @returns {Object} Métodos del intérprete.
- */
-function createNlpService({ estadisticasModel }) {
+function normalizeText(text) {
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+}
+
+function formatPeriod(filters) {
+  if (!filters.fechaDesde && !filters.fechaHasta) return 'histórico completo'
+  const date = (value) => value.toISOString().slice(0, 10)
+  return `${filters.fechaDesde ? date(filters.fechaDesde) : 'inicio'} a ${filters.fechaHasta ? date(filters.fechaHasta) : 'actualidad'}`
+}
+
+function createNlpService({ estadisticasModel, clock = () => new Date() }) {
   if (!estadisticasModel) {
     throw new Error('estadisticasModel es una dependencia obligatoria para el servicio NLP')
   }
 
-  /**
-   * Extrae el municipio mencionado en la consulta si coincide con municipios cacaoteros del Huila.
-   *
-   * @param {string} text - Texto en minúsculas.
-   * @returns {string|null} Municipio normalizado o null.
-   */
   function extractMunicipio(text) {
-    for (const m of HUILA_MUNICIPIOS) {
-      if (text.includes(m)) {
-        return m.charAt(0).toUpperCase() + m.slice(1)
-      }
-    }
-    return null
+    const municipio = HUILA_MUNICIPIOS.find((candidate) => text.includes(candidate))
+    if (!municipio) return undefined
+    return municipio.split(' ').map((word) => word[0].toUpperCase() + word.slice(1)).join(' ')
   }
 
-  /**
-   * Identifica la intención analítica mediante reglas deterministas de coincidencia léxica.
-   *
-   * @param {string} text - Pregunta normalizada.
-   * @returns {{ intencion: string, confianza: number }}
-   */
-  function classifyIntent(text) {
-    if (text.includes('bloquead') || text.includes('retenid') || text.includes('bloqueo')) {
-      return { intencion: 'CONSULTA_LOTES_BLOQUEADOS', confianza: 0.95 }
+  function extractPeriod(text) {
+    const today = clock()
+    const localDate = Object.fromEntries(
+      new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Bogota',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).formatToParts(today)
+        .filter((part) => ['year', 'month', 'day'].includes(part.type))
+        .map((part) => [part.type, Number(part.value)]),
+    )
+    const end = new Date(Date.UTC(localDate.year, localDate.month - 1, localDate.day, 5))
+    if (/\b(este mes|mes actual|durante el mes)\b/.test(text)) {
+      return {
+        fechaDesde: new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1, 5)),
+        fechaHasta: end,
+        periodo: 'mes actual',
+      }
     }
-    if (text.includes('incidencia') || text.includes('alerta') || text.includes('calidad') || text.includes('defecto')) {
-      return { intencion: 'CONSULTA_INCIDENCIAS_CALIDAD', confianza: 0.92 }
+    if (/\b(esta semana|ultima semana|ultimos 7 dias|ultimos siete dias)\b/.test(text)) {
+      const start = new Date(end)
+      start.setUTCDate(start.getUTCDate() - 6)
+      return { fechaDesde: start, fechaHasta: end, periodo: 'últimos 7 días' }
     }
-    if (text.includes('costo') || text.includes('gasto') || text.includes('inversion') || text.includes('inversión') || text.includes('cuanto costo') || text.includes('cuánto costó')) {
-      return { intencion: 'CONSULTA_COSTOS_TOTALES', confianza: 0.94 }
-    }
-    if (text.includes('inventario') || text.includes('saldo') || text.includes('stock') || text.includes('existencia') || text.includes('disponible')) {
-      return { intencion: 'CONSULTA_SALDO_INVENTARIO', confianza: 0.93 }
-    }
-    if (text.includes('merma') || text.includes('perdida') || text.includes('pérdida') || text.includes('rendimiento') || text.includes('desperdicio')) {
-      return { intencion: 'CONSULTA_MERMA_PROMEDIO', confianza: 0.96 }
-    }
+    return { periodo: 'histórico completo' }
+  }
 
-    return { intencion: 'CONSULTA_RESUMEN_GENERAL', confianza: 0.85 }
+  function classifyIntent(text) {
+    if (/bloquead|retenid|bloqueo/.test(text)) return 'CONSULTA_LOTES_BLOQUEADOS'
+    if (/incidencia|alerta|calidad|defecto/.test(text)) return 'CONSULTA_INCIDENCIAS_CALIDAD'
+    if (/costo promedio|coste promedio|promedio.*(costo|coste)|costo.*kilogramo|costo.*por kg|costo.*por kilo/.test(text)) {
+      return 'CONSULTA_COSTO_PROMEDIO_KG'
+    }
+    if (/productor|productores/.test(text) && /(merma|perdida|desperdicio)/.test(text) && /(superior|mayor|mas de|mas del|sobrepasa|supera|15\s*%)/.test(text)) {
+      return 'CONSULTA_PRODUCTORES_MERMA_UMBRAL'
+    }
+    if (/promedio.*merma|merma.*promedio|porcentaje promedio.*merma/.test(text)) {
+      return 'CONSULTA_MERMA_PROMEDIO'
+    }
+    if (/costo|coste|gasto|gastamos|inversion|cuanto costo|cuanto se gasto/.test(text)) {
+      return 'CONSULTA_COSTOS_TOTALES'
+    }
+    if (/transformacion|transformaciones/.test(text) && /(mayor|mas alta|mas elevada|top|mayores)/.test(text) && /(merma|perdida)/.test(text)) {
+      return 'CONSULTA_TRANSFORMACIONES_MAYOR_MERMA'
+    }
+    if (/(cuanto|cantidad|total).*(cacao|procesad|transformad)|cacao.*procesad/.test(text)) {
+      return 'CONSULTA_CANTIDAD_PROCESADA'
+    }
+    if (/inventario|saldo|stock|existencia|disponible/.test(text)) return 'CONSULTA_SALDO_INVENTARIO'
+    if (/merma|perdida|rendimiento|desperdicio/.test(text)) return 'CONSULTA_MERMA_PROMEDIO'
+    return 'CONSULTA_NO_SOPORTADA'
+  }
+
+  function summarizeCosts(rows) {
+    return rows.reduce((totals, row) => {
+      const currency = String(row.moneda || '').toUpperCase()
+      if (currency) totals[currency] = (totals[currency] || 0) + Number(row.costo_total || 0)
+      return totals
+    }, {})
+  }
+
+  function moneySummary(totals) {
+    const currencies = Object.entries(totals)
+    return currencies.length
+      ? currencies.map(([currency, total]) => `${currency} ${total.toLocaleString('es-CO', { maximumFractionDigits: 2 })}`).join('; ')
+      : 'sin costos registrados'
   }
 
   return {
-    /**
-     * Interpreta una pregunta en lenguaje natural, ejecuta de forma segura la consulta parametrizada
-     * y formula una respuesta ejecutiva sintetizada en español.
-     *
-     * @param {string} pregunta - Pregunta formulada por el usuario administrador.
-     * @returns {Promise<{
-     *   pregunta: string,
-     *   intencionDetectada: string,
-     *   confianza: number,
-     *   parametrosExtraidos: Object,
-     *   datos: unknown,
-     *   respuestaEnLenguajeNatural: string
-     * }>}
-     */
     async procesarConsulta(pregunta) {
-      const normalizada = pregunta.toLowerCase().trim()
-      const { intencion, confianza } = classifyIntent(normalizada)
+      const normalizada = normalizeText(pregunta)
+      const intencion = classifyIntent(normalizada)
       const municipio = extractMunicipio(normalizada)
-      const parametrosExtraidos = { municipio: municipio || undefined }
+      const periodo = extractPeriod(normalizada)
+      const filters = {
+        ...(municipio ? { municipio } : {}),
+        ...(periodo.fechaDesde ? { fechaDesde: periodo.fechaDesde, fechaHasta: periodo.fechaHasta } : {}),
+      }
+      const parametrosExtraidos = {
+        ...filters,
+        periodo: periodo.periodo,
+      }
 
-      let datos = null
-      let respuestaEnLenguajeNatural = ''
+      if (intencion === 'CONSULTA_NO_SOPORTADA') {
+        return {
+          pregunta,
+          intencionDetectada: intencion,
+          confianza: 0,
+          parametrosExtraidos,
+          datos: null,
+          respuestaEnLenguajeNatural: 'No pude identificar una consulta analítica compatible. Pregunta por mermas, productores sobre el 15 %, cantidades procesadas, costos, inventario, lotes bloqueados o incidencias abiertas.',
+        }
+      }
+
+      let confianza = 0.94
+      let datos
+      let respuestaEnLenguajeNatural
 
       switch (intencion) {
+        case 'CONSULTA_PRODUCTORES_MERMA_UMBRAL': {
+          const rows = await estadisticasModel.getMermasPorProductor({ ...filters, superaUmbral: true })
+          datos = rows.filter((row) => row.estado_evaluacion === 'EVALUABLE' && row.supera_umbral === true)
+          const productores = [...new Set(datos.map((row) => row.productor_nombre))]
+          respuestaEnLenguajeNatural = datos.length
+            ? `En ${periodo.periodo}${municipio ? ` en ${municipio}` : ''}, ${productores.length} productor(es) presentan transformaciones con merma superior al 15 %: ${productores.join(', ')}. Se encontraron ${datos.length} resultados verificables.`
+            : `No se encontraron productores con mermas superiores al 15 % en ${periodo.periodo}${municipio ? ` en ${municipio}` : ''}.`
+          break
+        }
         case 'CONSULTA_MERMA_PROMEDIO': {
-          const rows = await estadisticasModel.getMermasPorProductor(parametrosExtraidos)
-          datos = rows
-          const evaluables = rows.filter((r) => r.estado_evaluacion === 'EVALUABLE' && r.merma_porcentaje !== null)
-
-          if (evaluables.length === 0) {
-            respuestaEnLenguajeNatural = municipio
-              ? `No se encontraron registros de merma evaluables para el municipio de ${municipio}.`
-              : 'No se encontraron registros de transformaciones con mermas evaluables en el sistema.'
+          const rows = await estadisticasModel.getMermasPorProductor(filters)
+          const evaluables = rows.filter((row) => row.estado_evaluacion === 'EVALUABLE' && row.merma_porcentaje !== null)
+          if (/municipio|municipios|por localidad/.test(normalizada) && !municipio) {
+            const groups = new Map()
+            for (const row of evaluables) {
+              const group = groups.get(row.municipio) || []
+              group.push(Number(row.merma_porcentaje))
+              groups.set(row.municipio, group)
+            }
+            datos = [...groups].map(([nombre, values]) => ({
+              municipio: nombre,
+              transformacionesEvaluadas: values.length,
+              mermaPromedioPorcentaje: Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2)),
+            }))
+            respuestaEnLenguajeNatural = datos.length
+              ? `Merma promedio por municipio para ${periodo.periodo}: ${datos.map((item) => `${item.municipio}: ${item.mermaPromedioPorcentaje} % (${item.transformacionesEvaluadas} transformaciones)`).join('; ')}.`
+              : `No hay mermas evaluables por municipio para ${periodo.periodo}.`
           } else {
-            const sumMerma = evaluables.reduce((acc, curr) => acc + Number(curr.merma_porcentaje), 0)
-            const promedio = (sumMerma / evaluables.length).toFixed(2)
-            const conAlerta = evaluables.filter((r) => r.supera_umbral === true).length
-
-            respuestaEnLenguajeNatural = municipio
-              ? `En el municipio de ${municipio}, la merma promedio registrada es del ${promedio} % sobre ${evaluables.length} transformaciones evaluadas.${conAlerta > 0 ? ` Se identificaron ${conAlerta} transformaciones que superaron el umbral crítico del 15 %.` : ' Todas las transformaciones se mantienen dentro del umbral operativo permitido.'}`
-              : `A nivel general, la merma promedio registrada es del ${promedio} % en ${evaluables.length} transformaciones evaluadas.${conAlerta > 0 ? ` Hay ${conAlerta} transformaciones con alerta por superar estrictamente el umbral del 15 %.` : ''}`
+            datos = evaluables
+            const average = evaluables.length
+              ? evaluables.reduce((sum, row) => sum + Number(row.merma_porcentaje), 0) / evaluables.length
+              : null
+            respuestaEnLenguajeNatural = average === null
+              ? `No se encontraron registros de merma evaluables para ${periodo.periodo}${municipio ? ` en ${municipio}` : ''}.`
+              : `La merma promedio es ${average.toFixed(2)} % en ${evaluables.length} transformaciones evaluables para ${periodo.periodo}${municipio ? ` en ${municipio}` : ''}.`
           }
           break
         }
-
+        case 'CONSULTA_TRANSFORMACIONES_MAYOR_MERMA': {
+          const rows = await estadisticasModel.getMermasPorProductor(filters)
+          datos = rows
+            .filter((row) => row.estado_evaluacion === 'EVALUABLE' && row.merma_porcentaje !== null)
+            .sort((a, b) => Number(b.merma_porcentaje) - Number(a.merma_porcentaje))
+            .slice(0, 10)
+          respuestaEnLenguajeNatural = datos.length
+            ? `Las transformaciones con mayor merma para ${periodo.periodo} son: ${datos.map((row) => `${row.transformacion_codigo} (${Number(row.merma_porcentaje).toFixed(2)} %)`).join('; ')}.`
+            : `No hay transformaciones con merma evaluable para ${periodo.periodo}.`
+          break
+        }
+        case 'CONSULTA_CANTIDAD_PROCESADA': {
+          const summary = await estadisticasModel.getResumenGlobal(filters)
+          const kg = summary.metricasProcesamiento.totalEntradaKg
+          datos = { cantidadEntradaAcumuladaKg: kg, periodo: periodo.periodo }
+          respuestaEnLenguajeNatural = `Se registraron ${Number(kg).toLocaleString('es-CO')} kg de entrada acumulada en transformaciones durante ${periodo.periodo}. La cifra suma las entradas de cada transformación y no representa cacao único sin doble conteo entre etapas.`
+          break
+        }
+        case 'CONSULTA_COSTO_PROMEDIO_KG': {
+          if (municipio) {
+            return {
+              pregunta,
+              intencionDetectada: 'CONSULTA_NO_SOPORTADA',
+              confianza: 0,
+              parametrosExtraidos,
+              datos: null,
+              respuestaEnLenguajeNatural: 'No es posible atribuir costos por kilogramo a un municipio: los costos se registran por transformación y no por productor.',
+            }
+          }
+          const averageData = await estadisticasModel.getCostoPromedioPorKg(filters)
+          const average = averageData.costoPromedioCOPKg
+          datos = { ...averageData, periodo: periodo.periodo }
+          respuestaEnLenguajeNatural = average === null
+            ? `No hay costos COP y cantidades de salida comparables suficientes para calcular el costo promedio por kilogramo en ${periodo.periodo}.`
+            : `El costo promedio registrado es ${average.toLocaleString('es-CO', { maximumFractionDigits: 2 })} COP/kg, calculado como ${Number(averageData.costoCOP).toLocaleString('es-CO')} COP dividido por ${Number(averageData.salidaAcumuladaKg).toLocaleString('es-CO')} kg de salida acumulada de transformaciones con costos COP en ${periodo.periodo}.`
+          break
+        }
         case 'CONSULTA_COSTOS_TOTALES': {
-          const rows = await estadisticasModel.getCostos()
-          datos = rows
-          if (rows.length === 0) {
-            respuestaEnLenguajeNatural = 'Actualmente no se registran costos de transformación en la plataforma.'
-          } else {
-            const totalCop = rows
-              .filter((r) => r.moneda === 'COP')
-              .reduce((acc, curr) => acc + Number(curr.costo_total), 0)
-            const totalTransformaciones = rows.length
-            respuestaEnLenguajeNatural = `Los costos totales registrados para procesos de transformación ascienden a $ ${totalCop.toLocaleString('es-CO')} COP en ${totalTransformaciones} registros de costos.`
-          }
+          const rows = await estadisticasModel.getCostos(filters)
+          const totals = summarizeCosts(rows)
+          datos = { costosPorMoneda: totals, periodo: periodo.periodo }
+          respuestaEnLenguajeNatural = `Costos de procesamiento para ${periodo.periodo}: ${moneySummary(totals)}. No se suman monedas distintas entre sí.`
           break
         }
-
         case 'CONSULTA_LOTES_BLOQUEADOS': {
           const rows = await estadisticasModel.getEstadoLotes()
-          const bloqueados = rows.filter((r) => r.bloqueado === true)
-          datos = bloqueados
-
-          if (bloqueados.length === 0) {
-            respuestaEnLenguajeNatural = 'Excelente noticia: En este momento no hay lotes bloqueados en el sistema Kaotrace. Todo el grano en inventario está disponible o en proceso normal.'
-          } else {
-            const listaCodigos = bloqueados.map((b) => `${b.lote_codigo} (${b.productor_nombre || 'Sin productor'}, Motivo: "${b.motivo_estado_actual || 'No especificado'}")`).join('; ')
-            respuestaEnLenguajeNatural = `Se identificaron ${bloqueados.length} lote(s) en estado BLOQUEADO por control de calidad: ${listaCodigos}.`
-          }
+          datos = rows.filter((row) => row.bloqueado === true)
+          respuestaEnLenguajeNatural = datos.length
+            ? `Hay ${datos.length} lote(s) en estado BLOQUEADO: ${datos.map((row) => `${row.lote_codigo} (motivo: ${row.motivo_estado_actual || 'No especificado'})`).join('; ')}.`
+            : 'No hay lotes bloqueados registrados actualmente.'
           break
         }
-
         case 'CONSULTA_SALDO_INVENTARIO': {
-          const rows = await estadisticasModel.getInventario(parametrosExtraidos)
-          datos = rows
-          const evaluables = rows.filter((r) => r.saldo_inventario_kg !== null)
-          const totalKg = evaluables.reduce((acc, curr) => acc + Number(curr.saldo_inventario_kg), 0)
-
-          respuestaEnLenguajeNatural = municipio
-            ? `En el municipio de ${municipio}, el saldo de inventario disponible es de ${totalKg.toLocaleString('es-CO')} kg distribuidos en ${evaluables.length} lotes evaluables.`
-            : `El inventario total disponible en Kaotrace asciende a ${totalKg.toLocaleString('es-CO')} kg de cacao distribuidos en ${evaluables.length} lotes de recepción.`
+          const rows = await estadisticasModel.getInventario(filters)
+          const evaluables = rows.filter((row) => row.saldo_inventario_kg !== null)
+          const kg = evaluables.reduce((sum, row) => sum + Number(row.saldo_inventario_kg), 0)
+          datos = { lotesEvaluables: evaluables.length, saldoKg: kg, municipio }
+          respuestaEnLenguajeNatural = `El saldo de inventario${municipio ? ` en ${municipio}` : ''} es ${kg.toLocaleString('es-CO')} kg en ${evaluables.length} lotes.`
           break
         }
-
         case 'CONSULTA_INCIDENCIAS_CALIDAD': {
           const rows = await estadisticasModel.getIncidencias({ soloAbiertas: true })
           datos = rows
-
-          if (rows.length === 0) {
-            respuestaEnLenguajeNatural = 'No se registran incidencias de calidad abiertas en este momento.'
-          } else {
-            const porTipo = rows.reduce((acc, curr) => {
-              acc[curr.tipo] = (acc[curr.tipo] || 0) + 1
-              return acc
-            }, {})
-            const resumenTipos = Object.entries(porTipo).map(([tipo, cant]) => `${cant} de tipo ${tipo}`).join(', ')
-            respuestaEnLenguajeNatural = `Hay ${rows.length} incidencia(s) abierta(s) pendientes de atención en el sistema (${resumenTipos}).`
-          }
+          respuestaEnLenguajeNatural = rows.length
+            ? `Hay ${rows.length} incidencia(s) abierta(s) en el sistema.`
+            : 'No se registran incidencias abiertas actualmente.'
           break
         }
-
-        default: {
-          const resumen = await estadisticasModel.getResumenGlobal()
-          datos = resumen
-          const m = resumen.metricasProcesamiento
-          respuestaEnLenguajeNatural = `Resumen Kaotrace: ${m.totalTransformaciones} transformaciones procesadas (${m.totalEntradaKg} kg recibidos, ${m.totalSalidaKg} kg producidos, merma global del ${m.mermaGlobalPorcentaje} %). Inventario actual: ${resumen.inventario.saldoTotalKg} kg en ${resumen.inventario.totalLotes} lotes, con ${resumen.inventario.lotesBloqueados} lote(s) bloqueado(s) y ${resumen.incidencias.abiertas} incidencia(s) abierta(s).`
-          break
-        }
+        default:
+          confianza = 0
+          datos = null
+          respuestaEnLenguajeNatural = 'No pude identificar una consulta analítica compatible.'
       }
 
       return {

@@ -9,14 +9,14 @@
  * @returns {{ value?: { pregunta: string }, error?: string }}
  */
 function validateNlpQueryBody(body) {
-  if (!body || typeof body !== 'object') {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return { error: 'El cuerpo de la solicitud debe ser un objeto JSON válido' }
   }
 
   const { pregunta } = body
 
-  if (typeof pregunta !== 'string' || pregunta.trim().length < 3) {
-    return { error: 'El campo "pregunta" es obligatorio y debe tener al menos 3 caracteres' }
+  if (typeof pregunta !== 'string' || pregunta.trim().length < 3 || pregunta.trim().length > 500) {
+    return { error: 'El campo "pregunta" es obligatorio y debe tener entre 3 y 500 caracteres' }
   }
 
   return {

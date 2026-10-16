@@ -1,7 +1,10 @@
 require('dotenv').config()
 
 const postgres = require('postgres')
+const { drizzle } = require('drizzle-orm/postgres-js')
 const { randomUUID } = require('node:crypto')
+const schema = require('../../src/db/schema')
+const { createEstadisticasModel } = require('../../src/models/estadisticas.model')
 const rollback = new Error('Rollback analytics test fixtures')
 
 function assert(condition, message) {
@@ -16,6 +19,7 @@ async function main() {
   }
 
   const client = postgres(process.env.DATABASE_URL, { max: 1 })
+  const estadisticasModel = createEstadisticasModel(drizzle(client, { schema }))
   let checks = 0
 
   try {
@@ -31,8 +35,9 @@ async function main() {
           LIMIT 1
         `
         const lots = await tx`
-          SELECT l.id, l.codigo, l.productor_id
+          SELECT l.id, l.codigo, l.productor_id, p.municipio AS productor_municipio
           FROM lotes l
+          LEFT JOIN productores p ON p.id = l.productor_id
           WHERE l.codigo IN ('CAC001', 'CAC002', 'CAC003')
           ORDER BY l.codigo
         `
@@ -81,7 +86,10 @@ async function main() {
             AND productor_id = ${lotByCode.get('CAC001').productor_id}
         `
         assert(producerResult.estado_evaluacion === 'EVALUABLE', 'El detalle por productor debe conservar atribución verificable')
-        assert(producerResult.municipio === 'Rivera', 'El detalle debe devolver el municipio')
+        assert(
+          producerResult.municipio === lotByCode.get('CAC001').productor_municipio,
+          'El detalle debe devolver el municipio del productor persistido',
+        )
         assert(producerResult.lotes_involucrados.length === 2, 'El reporte debe incluir lotes de entrada y salida')
         checks += 3
 
@@ -180,6 +188,18 @@ async function main() {
         throw error
       }
     }
+
+    const averageCost = await estadisticasModel.getCostoPromedioPorKg()
+    assert(
+      (averageCost.costoPromedioCOPKg === null && averageCost.salidaAcumuladaKg === 0)
+      || (
+        Number.isFinite(averageCost.costoPromedioCOPKg)
+        && averageCost.salidaAcumuladaKg > 0
+        && averageCost.costoCOP >= 0
+      ),
+      'El costo promedio por kg debe usar únicamente costos COP y salidas comparables',
+    )
+    checks += 1
 
     console.log(`Pruebas analíticas correctas: ${checks} comprobaciones; todos los datos de prueba se revirtieron.`)
   } finally {

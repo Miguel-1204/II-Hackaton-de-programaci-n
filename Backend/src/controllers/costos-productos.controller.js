@@ -33,7 +33,7 @@ function createCostosProductosController(productosService) {
       }
 
       try {
-        const nuevo = await productosService.createProducto(validation.value)
+        const nuevo = await productosService.createProducto(validation.value, request.user.id)
         return response.status(201).json(nuevo)
       } catch (error) {
         if (error.statusCode) {
@@ -83,6 +83,22 @@ function createCostosProductosController(productosService) {
       }
     },
 
+    async getFichaPublica(request, response, next) {
+      const { codigo } = request.params
+      if (!codigo || !codigo.trim() || codigo.length > 100) {
+        return response.status(400).json({ error: 'Código de producto inválido' })
+      }
+      try {
+        const ficha = await productosService.getFichaPublica(codigo.trim())
+        return response.status(200).json(ficha)
+      } catch (error) {
+        if (error.statusCode) {
+          return response.status(error.statusCode).json({ error: error.message })
+        }
+        return next(error)
+      }
+    },
+
     /**
      * Registra un costo directo en una transformación.
      *
@@ -102,7 +118,11 @@ function createCostosProductosController(productosService) {
       }
 
       try {
-        const costo = await productosService.addCostoTransformacion(transformacionId, validation.value)
+        const costo = await productosService.addCostoTransformacion(
+          transformacionId,
+          validation.value,
+          request.user.id,
+        )
         return response.status(201).json(costo)
       } catch (error) {
         if (error.statusCode) {

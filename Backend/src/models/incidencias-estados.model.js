@@ -2,7 +2,7 @@
  * @fileoverview Modelo de datos para incidencias operativas, control de estados y auditoría de bloqueos/liberaciones.
  */
 
-const { eq } = require('drizzle-orm')
+const { eq, sql } = require('drizzle-orm')
 const { incidencias, historialEstados, lotes, auditoriaEventos } = require('../db/schema')
 
 /**
@@ -78,12 +78,12 @@ function createIncidenciasEstadosModel(db) {
      */
     async updateEstadoLote(loteId, usuarioId, estadoNuevo, motivo) {
       return await db.transaction(async (tx) => {
-        // 1. Obtener estado previo
-        const [loteActual] = await tx
-          .select({ id: lotes.id, estado: lotes.estado, codigo: lotes.codigo })
-          .from(lotes)
-          .where(eq(lotes.id, loteId))
-          .limit(1)
+        const [loteActual] = await tx.execute(sql`
+          SELECT id, estado, codigo
+          FROM lotes
+          WHERE id = ${loteId}
+          FOR UPDATE
+        `)
 
         if (!loteActual) {
           throw new Error(`El lote con ID ${loteId} no fue encontrado`)

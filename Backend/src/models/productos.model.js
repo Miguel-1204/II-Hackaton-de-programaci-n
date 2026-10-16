@@ -3,7 +3,13 @@
  */
 
 const { eq, sql } = require('drizzle-orm')
-const { productos, costosTransformacion, transformacionLotes, lotes } = require('../db/schema')
+const {
+  auditoriaEventos,
+  costosTransformacion,
+  lotes,
+  productos,
+  transformacionLotes,
+} = require('../db/schema')
 
 /**
  * Factoría que instancia el modelo de productos, costos y márgenes.
@@ -28,19 +34,33 @@ function createProductosModel(db) {
      * @param {string} [data.unidadComercial] - Unidad comercial de venta.
      * @returns {Promise<Object>} Registro del producto creado.
      */
-    async create(data) {
-      const [nuevo] = await db
-        .insert(productos)
-        .values({
-          codigo: data.codigo,
-          nombre: data.nombre,
-          descripcion: data.descripcion,
-          precioReferencia: data.precioReferencia !== undefined ? String(data.precioReferencia) : null,
-          unidadComercial: data.unidadComercial,
-        })
-        .returning()
+    async create(data, usuarioId) {
+      return db.transaction(async (tx) => {
+        const [nuevo] = await tx
+          .insert(productos)
+          .values({
+            codigo: data.codigo,
+            nombre: data.nombre,
+            descripcion: data.descripcion,
+            precioReferencia: data.precioReferencia !== undefined ? String(data.precioReferencia) : null,
+            unidadComercial: data.unidadComercial,
+          })
+          .returning()
 
-      return nuevo
+        await tx.insert(auditoriaEventos).values({
+          usuarioId,
+          entidad: 'PRODUCTO',
+          entidadId: String(nuevo.id),
+          operacion: 'CREACION',
+          valoresNuevos: {
+            codigo: nuevo.codigo,
+            nombre: nuevo.nombre,
+            precioReferencia: nuevo.precioReferencia,
+            unidadComercial: nuevo.unidadComercial,
+          },
+        })
+        return nuevo
+      })
     },
 
     /**
@@ -74,6 +94,88 @@ function createProductosModel(db) {
       return rows[0] || null
     },
 
+    async getFichaPublica(codigo) {
+      const [product] = await db
+        .select({
+          id: productos.id,
+          codigo: productos.codigo,
+          nombre: productos.nombre,
+          descripcion: productos.descripcion,
+          unidadComercial: productos.unidadComercial,
+        })
+        .from(productos)
+        .where(eq(productos.codigo, codigo))
+        .limit(1)
+      if (!product) return null
+
+      const lotesProducto = await db.execute(sql`
+        SELECT
+          l.id,
+          l.codigo,
+          l.fecha_recepcion,
+          l.cantidad_recibida,
+          l.unidad,
+          l.estado,
+          coalesce(
+            jsonb_agg(
+              DISTINCT jsonb_build_object(
+                'loteEntrada', entrada.codigo,
+                'municipioOrigen', origen.municipio,
+                'transformacion', t.codigo,
+                'etapa', t.etapa,
+                'fechaProcesamiento', t.fecha
+              )
+            ) FILTER (WHERE entrada.id IS NOT NULL),
+            '[]'::jsonb
+          ) AS trazabilidad
+        FROM lotes l
+        LEFT JOIN transformacion_lotes salida_tl
+          ON salida_tl.lote_id = l.id
+          AND salida_tl.tipo_participacion = 'SALIDA'
+        LEFT JOIN transformaciones t ON t.id = salida_tl.transformacion_id
+        LEFT JOIN transformacion_lotes entrada_tl
+          ON entrada_tl.transformacion_id = t.id
+          AND entrada_tl.tipo_participacion = 'ENTRADA'
+        LEFT JOIN lotes entrada ON entrada.id = entrada_tl.lote_id
+        LEFT JOIN productores origen ON origen.id = entrada.productor_id
+        WHERE l.producto_id = ${product.id}
+        GROUP BY l.id
+        ORDER BY l.fecha_recepcion DESC, l.id DESC
+      `)
+      const statuses = lotesProducto.map((row) => String(row.estado).toUpperCase())
+      const estadoComercial = statuses.includes('BLOQUEADO')
+        ? 'BLOQUEADO'
+        : statuses.length > 0 && statuses.every((state) => ['LIBERADO', 'DISPONIBLE'].includes(state))
+          ? 'LIBERADO'
+          : 'PENDIENTE'
+
+      return {
+        producto: {
+          codigo: product.codigo,
+          nombre: product.nombre,
+          descripcion: product.descripcion,
+          unidadComercial: product.unidadComercial,
+        },
+        estadoComercial,
+        disponible: estadoComercial === 'LIBERADO',
+        origenes: [...new Set(
+          lotesProducto.flatMap((row) =>
+            (row.trazabilidad || [])
+              .map((entry) => entry.municipioOrigen)
+              .filter(Boolean),
+          ),
+        )].sort(),
+        lotes: lotesProducto.map((row) => ({
+          codigo: row.codigo,
+          fechaRecepcion: row.fecha_recepcion,
+          cantidad: Number(row.cantidad_recibida),
+          unidad: row.unidad,
+          estado: row.estado,
+          trazabilidad: row.trazabilidad || [],
+        })),
+      }
+    },
+
     /**
      * Registra un nuevo concepto de costo en una transformación.
      *
@@ -86,18 +188,32 @@ function createProductosModel(db) {
      * @returns {Promise<Object>} Registro de costo insertado.
      */
     async addCosto(data) {
-      const [costo] = await db
-        .insert(costosTransformacion)
-        .values({
-          transformacionId: data.transformacionId,
-          concepto: data.concepto,
-          valor: data.valor,
-          moneda: data.moneda,
-          observaciones: data.observaciones,
-        })
-        .returning()
+      return db.transaction(async (tx) => {
+        const [costo] = await tx
+          .insert(costosTransformacion)
+          .values({
+            transformacionId: data.transformacionId,
+            concepto: data.concepto,
+            valor: data.valor,
+            moneda: data.moneda,
+            observaciones: data.observaciones,
+          })
+          .returning()
 
-      return costo
+        await tx.insert(auditoriaEventos).values({
+          usuarioId: data.usuarioId,
+          entidad: 'COSTO_TRANSFORMACION',
+          entidadId: String(costo.id),
+          operacion: 'CREACION',
+          valoresNuevos: {
+            transformacionId: costo.transformacionId,
+            concepto: costo.concepto,
+            valor: costo.valor,
+            moneda: costo.moneda,
+          },
+        })
+        return costo
+      })
     },
 
     /**
@@ -106,7 +222,7 @@ function createProductosModel(db) {
      * @param {number} transformacionId - ID de la transformación.
      * @returns {Promise<Object>} Resumen de costos, lote de salida, costo unitario y márgenes.
      */
-async calculateMargenes(transformacionId) {
+    async calculateMargenes(transformacionId) {
       // 1. Obtener totales de costo por moneda desde la vista
       const costosTotal = await db.execute(sql`
         SELECT
@@ -117,49 +233,64 @@ async calculateMargenes(transformacionId) {
         WHERE transformacion_id = ${transformacionId}
       `)
 
-      // 2. Obtener participaciones de SALIDA usando SQL seguro para evitar errores de sintaxis en ORM
-      const salidas = await db.execute(sql`
-        SELECT 
-          tl.id AS "participacionId",
-          tl.lote_id AS "loteId",
-          tl.cantidad,
-          tl.unidad,
-          l.codigo AS "loteCodigo",
-          l.producto_id AS "productoId",
-          p.codigo AS "productoCodigo",
-          p.nombre AS "productoNombre",
-          p.precio_referencia AS "precioReferencia",
-          p.unidad_comercial AS "unidadComercial"
-        FROM transformacion_lotes tl
-        JOIN lotes l ON l.id = tl.lote_id
-        LEFT JOIN productos p ON p.id = l.producto_id
-        WHERE tl.transformacion_id = ${transformacionId} 
-          AND tl.tipo_participacion = 'SALIDA'
-      `)
+      // 2. Obtener participaciones de SALIDA con datos de lote y producto asociado
+      const salidas = await db
+        .select({
+          participacionId: transformacionLotes.id,
+          loteId: transformacionLotes.loteId,
+          cantidad: transformacionLotes.cantidad,
+          unidad: transformacionLotes.unidad,
+          loteCodigo: lotes.codigo,
+          productoId: lotes.productoId,
+          productoCodigo: productos.codigo,
+          productoNombre: productos.nombre,
+          precioReferencia: productos.precioReferencia,
+          unidadComercial: productos.unidadComercial,
+        })
+        .from(transformacionLotes)
+        .innerJoin(lotes, eq(lotes.id, transformacionLotes.loteId))
+        .leftJoin(productos, eq(productos.id, lotes.productoId))
+        .where(
+          sql`${transformacionLotes.transformacionId} = ${transformacionId} AND ${transformacionLotes.tipoParticipacion} = 'SALIDA'`,
+        )
 
       // Total de salida en kg si aplica
       const [mermaRow] = await db.execute(sql`
         SELECT salida_kg FROM analitica_transformacion_merma WHERE transformacion_id = ${transformacionId}
       `)
-      const totalSalidaKg = mermaRow?.salida_kg ? Number(mermaRow.salida_kg) : null
-
-      const costoAgrupado = costosTotal.length > 0 ? costosTotal[0] : null
-      const costoTotalMonto = costoAgrupado ? Number(costoAgrupado.costo_total) : 0
-      const moneda = costoAgrupado ? costoAgrupado.moneda : 'COP'
+      const totalSalidaKg =
+        mermaRow?.salida_kg === null || mermaRow?.salida_kg === undefined
+          ? null
+          : Number(mermaRow.salida_kg)
+      const costosPorMoneda = costosTotal.map((row) => ({
+        moneda: row.moneda,
+        conceptosCosto: Number(row.conceptos_costo),
+        costoTotal: Number(row.costo_total),
+      }))
+      const costoCOP = costosPorMoneda.find((row) => row.moneda === 'COP')
+      const moneda = costosPorMoneda.length === 1 ? costosPorMoneda[0].moneda : null
+      const isPricePerKg = (unidad) =>
+        typeof unidad === 'string' &&
+        ['kg', 'kilogramo', 'kilogramos', 'cop/kg', 'cop por kg'].includes(
+          unidad.trim().toLowerCase(),
+        )
 
       const productosDerivados = salidas.map((item) => {
         const cantidadSalida = Number(item.cantidad)
         const precioRef = item.precioReferencia !== null ? Number(item.precioReferencia) : null
 
-        let costoUnitario = null
-        if (cantidadSalida > 0 && costoTotalMonto >= 0) {
-          costoUnitario = costoTotalMonto / (totalSalidaKg && totalSalidaKg > 0 ? totalSalidaKg : cantidadSalida)
-        }
+        const costoUnitario =
+          costoCOP && totalSalidaKg > 0 ? costoCOP.costoTotal / totalSalidaKg : null
 
         let margenNeto = null
         let margenPorcentaje = null
 
-        if (costoUnitario !== null && precioRef !== null && precioRef > 0) {
+        if (
+          costoUnitario !== null &&
+          precioRef !== null &&
+          precioRef > 0 &&
+          isPricePerKg(item.unidadComercial)
+        ) {
           margenNeto = precioRef - costoUnitario
           margenPorcentaje = (margenNeto / precioRef) * 100
         }
@@ -176,15 +307,16 @@ async calculateMargenes(transformacionId) {
           costoUnitario: costoUnitario !== null ? Number(costoUnitario.toFixed(2)) : null,
           margenNeto: margenNeto !== null ? Number(margenNeto.toFixed(2)) : null,
           margenPorcentaje: margenPorcentaje !== null ? Number(margenPorcentaje.toFixed(2)) : null,
-          moneda,
+          costoUnitarioUnidad: costoUnitario === null ? null : 'COP/kg',
         }
       })
 
       return {
         transformacionId,
         moneda,
-        costosTotal: costoTotalMonto,
-        conceptosCosto: costoAgrupado ? Number(costoAgrupado.conceptos_costo) : 0,
+        costosTotal: costoCOP ? costoCOP.costoTotal : null,
+        conceptosCosto: costosPorMoneda.reduce((sum, row) => sum + row.conceptosCosto, 0),
+        costosPorMoneda,
         totalSalidaKg,
         productosDerivados,
       }

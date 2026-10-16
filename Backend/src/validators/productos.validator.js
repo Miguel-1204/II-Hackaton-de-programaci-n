@@ -15,7 +15,7 @@
  * }, error?: string }}
  */
 function validateCreateProductoBody(body) {
-  if (!body || typeof body !== 'object') {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return { error: 'El cuerpo de la solicitud debe ser un objeto JSON válido' }
   }
 
@@ -28,12 +28,30 @@ function validateCreateProductoBody(body) {
   if (typeof nombre !== 'string' || !nombre.trim()) {
     return { error: 'El campo "nombre" es obligatorio y debe ser una cadena no vacía' }
   }
+  if (codigo.trim().length > 100 || nombre.trim().length > 200) {
+    return { error: 'codigo admite hasta 100 caracteres y nombre hasta 200' }
+  }
+  if (descripcion !== undefined && descripcion !== null && (
+    typeof descripcion !== 'string' || descripcion.length > 4000
+  )) {
+    return { error: 'descripcion debe ser texto de hasta 4000 caracteres' }
+  }
 
   let sanitizedPrecio = undefined
   if (precioReferencia !== undefined && precioReferencia !== null) {
     const num = Number(precioReferencia)
-    if (!Number.isFinite(num) || num < 0) {
-      return { error: 'El campo "precioReferencia" debe ser un número mayor o igual a cero' }
+    if (
+      !Number.isFinite(num) ||
+      num < 0 ||
+      num > 999999999999.99 ||
+      Math.round(num * 100) / 100 !== num
+    ) {
+      return { error: 'precioReferencia debe ser no negativo, tener hasta 2 decimales y ajustarse al rango permitido' }
+    }
+    if (unidadComercial !== undefined && unidadComercial !== null && (
+      typeof unidadComercial !== 'string' || unidadComercial.trim().length > 50
+    )) {
+      return { error: 'unidadComercial debe ser texto de hasta 50 caracteres' }
     }
     sanitizedPrecio = num
   }
@@ -61,7 +79,7 @@ function validateCreateProductoBody(body) {
  * }, error?: string }}
  */
 function validateCreateCostoBody(body) {
-  if (!body || typeof body !== 'object') {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return { error: 'El cuerpo de la solicitud debe ser un objeto JSON válido' }
   }
 
@@ -72,12 +90,25 @@ function validateCreateCostoBody(body) {
   }
 
   const numValor = Number(valor)
-  if (!Number.isFinite(numValor) || numValor < 0) {
-    return { error: 'El campo "valor" debe ser un número mayor o igual a cero' }
+  if (
+    !Number.isFinite(numValor) ||
+    numValor < 0 ||
+    numValor > 999999999999.99 ||
+    Math.round(numValor * 100) / 100 !== numValor
+  ) {
+    return { error: 'valor debe ser no negativo, tener hasta 2 decimales y ajustarse al rango permitido' }
   }
 
   if (typeof moneda !== 'string' || !moneda.trim()) {
     return { error: 'El campo "moneda" es obligatorio (ej. COP, USD)' }
+  }
+  if (concepto.trim().length > 150 || moneda.trim().length > 10) {
+    return { error: 'concepto admite hasta 150 caracteres y moneda hasta 10' }
+  }
+  if (observaciones !== undefined && observaciones !== null && (
+    typeof observaciones !== 'string' || observaciones.length > 4000
+  )) {
+    return { error: 'observaciones debe ser texto de hasta 4000 caracteres' }
   }
 
   return {

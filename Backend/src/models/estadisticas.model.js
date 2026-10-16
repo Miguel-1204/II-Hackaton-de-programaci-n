@@ -4,6 +4,12 @@
 
 const { sql } = require('drizzle-orm')
 
+function exclusiveEndDate(date) {
+  const exclusive = new Date(date)
+  exclusive.setUTCDate(exclusive.getUTCDate() + 1)
+  return exclusive.toISOString()
+}
+
 /**
  * Factoría que instancia el modelo de estadísticas y consultas analíticas.
  *
@@ -25,6 +31,7 @@ function createEstadisticasModel(db) {
      * @param {string} [filters.municipio] - Municipio del productor.
      * @param {number} [filters.productorId] - ID del productor.
      * @param {boolean} [filters.superaUmbral] - Si supera el umbral estricto del 15%.
+     * @param {string} [filters.estadoEvaluacion] - Resultado de evaluabilidad de la merma.
      * @returns {Promise<Array<Object>>}
      */
     async getMermasPorProductor(filters = {}) {
@@ -34,7 +41,7 @@ function createEstadisticasModel(db) {
         conditions.push(sql`fecha_procesamiento >= ${filters.fechaDesde.toISOString()}`)
       }
       if (filters.fechaHasta) {
-        conditions.push(sql`fecha_procesamiento <= ${filters.fechaHasta.toISOString()}`)
+        conditions.push(sql`fecha_procesamiento < ${exclusiveEndDate(filters.fechaHasta)}`)
       }
       if (filters.municipio) {
         conditions.push(sql`lower(municipio) = lower(${filters.municipio})`)
@@ -44,6 +51,9 @@ function createEstadisticasModel(db) {
       }
       if (typeof filters.superaUmbral === 'boolean') {
         conditions.push(sql`supera_umbral = ${filters.superaUmbral}`)
+      }
+      if (filters.estadoEvaluacion) {
+        conditions.push(sql`estado_evaluacion = ${filters.estadoEvaluacion}`)
       }
 
       const whereClause = conditions.length > 0 ? sql`WHERE ${sql.join(conditions, sql` AND `)}` : sql``
@@ -89,7 +99,7 @@ function createEstadisticasModel(db) {
         conditions.push(sql`fecha_procesamiento >= ${filters.fechaDesde.toISOString()}`)
       }
       if (filters.fechaHasta) {
-        conditions.push(sql`fecha_procesamiento <= ${filters.fechaHasta.toISOString()}`)
+        conditions.push(sql`fecha_procesamiento < ${exclusiveEndDate(filters.fechaHasta)}`)
       }
 
       const whereClause = conditions.length > 0 ? sql`WHERE ${sql.join(conditions, sql` AND `)}` : sql``
@@ -109,6 +119,47 @@ function createEstadisticasModel(db) {
       `)
 
       return rows || []
+    },
+
+    async getCostoPromedioPorKg(filters = {}) {
+      const mermaConditions = [sql`estado_evaluacion = 'EVALUABLE'`, sql`salida_kg IS NOT NULL`]
+      const costoConditions = [sql`moneda = 'COP'`]
+      if (filters.fechaDesde) {
+        mermaConditions.push(sql`fecha_procesamiento >= ${filters.fechaDesde.toISOString()}`)
+        costoConditions.push(sql`fecha_procesamiento >= ${filters.fechaDesde.toISOString()}`)
+      }
+      if (filters.fechaHasta) {
+        const endExclusive = exclusiveEndDate(filters.fechaHasta)
+        mermaConditions.push(sql`fecha_procesamiento < ${endExclusive}`)
+        costoConditions.push(sql`fecha_procesamiento < ${endExclusive}`)
+      }
+      const mermaWhere = sql`WHERE ${sql.join(mermaConditions, sql` AND `)}`
+      const costoWhere = sql`WHERE ${sql.join(costoConditions, sql` AND `)}`
+      const [row] = await db.execute(sql`
+        WITH costos AS (
+          SELECT transformacion_id, sum(costo_total) AS costo_cop
+          FROM analitica_costos_por_transformacion
+          ${costoWhere}
+          GROUP BY transformacion_id
+        ),
+        salidas AS (
+          SELECT transformacion_id, salida_kg
+          FROM analitica_transformacion_merma
+          ${mermaWhere}
+        )
+        SELECT
+          coalesce(sum(costos.costo_cop), 0) AS costo_cop,
+          coalesce(sum(salidas.salida_kg), 0) AS salida_kg
+        FROM costos
+        JOIN salidas USING (transformacion_id)
+      `)
+      const costoCOP = Number(row?.costo_cop || 0)
+      const salidaKg = Number(row?.salida_kg || 0)
+      return {
+        costoCOP,
+        salidaAcumuladaKg: salidaKg,
+        costoPromedioCOPKg: salidaKg > 0 ? costoCOP / salidaKg : null,
+      }
     },
 
     /**
@@ -218,6 +269,24 @@ function createEstadisticasModel(db) {
      * @returns {Promise<Object>} Resumen con masa total procesada, merma promedio, costos, e incidencias.
      */
     async getResumenGlobal(filters = {}) {
+      const mermaConditions = []
+      const costoConditions = []
+      if (filters.fechaDesde) {
+        mermaConditions.push(sql`fecha_procesamiento >= ${filters.fechaDesde.toISOString()}`)
+        costoConditions.push(sql`fecha_procesamiento >= ${filters.fechaDesde.toISOString()}`)
+      }
+      if (filters.fechaHasta) {
+        const endExclusive = exclusiveEndDate(filters.fechaHasta)
+        mermaConditions.push(sql`fecha_procesamiento < ${endExclusive}`)
+        costoConditions.push(sql`fecha_procesamiento < ${endExclusive}`)
+      }
+      const mermaWhere = mermaConditions.length
+        ? sql`WHERE ${sql.join(mermaConditions, sql` AND `)}`
+        : sql``
+      const costoWhere = costoConditions.length
+        ? sql`WHERE ${sql.join(costoConditions, sql` AND `)}`
+        : sql``
+
       const [mermaGlobal] = await db.execute(sql`
         SELECT
           count(*) AS total_transformaciones,
@@ -232,6 +301,7 @@ function createEstadisticasModel(db) {
             ELSE 0
           END AS merma_global_porcentaje
         FROM analitica_transformacion_merma
+        ${mermaWhere}
       `)
 
       const costosAgrupados = await db.execute(sql`
@@ -239,6 +309,7 @@ function createEstadisticasModel(db) {
           moneda,
           sum(costo_total) AS total_costos
         FROM analitica_costos_por_transformacion
+        ${costoWhere}
         GROUP BY moneda
       `)
 

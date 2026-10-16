@@ -78,10 +78,13 @@ function createTrazabilidadModel(db) {
           AND tl_salida.tipo_participacion = 'SALIDA'
       `)
 
-      const materiasPrimasOrigen = []
-      for (const t of transformacionesOrigen) {
-        const entradas = await db.execute(sql`
+      const upstreamIds = transformacionesOrigen.map((t) => Number(t.transformacion_id))
+      const upstreamFilter = sql.join(upstreamIds.map((id) => sql`${id}`), sql`, `)
+
+      const entradasOrigen = upstreamIds.length
+        ? await db.execute(sql`
           SELECT
+            tl.transformacion_id,
             l.id AS lote_id,
             l.codigo AS lote_codigo,
             l.cantidad_recibida,
@@ -95,15 +98,20 @@ function createTrazabilidadModel(db) {
           FROM transformacion_lotes tl
           JOIN lotes l ON l.id = tl.lote_id
           JOIN productores p ON p.id = l.productor_id
-          WHERE tl.transformacion_id = ${t.transformacion_id}
+          WHERE tl.transformacion_id IN (${upstreamFilter})
             AND tl.tipo_participacion = 'ENTRADA'
         `)
-
-        materiasPrimasOrigen.push({
-          transformacion: t,
-          lotesEntrada: entradas,
-        })
+        : []
+      const entradasPorTransformacion = new Map()
+      for (const entrada of entradasOrigen) {
+        const rows = entradasPorTransformacion.get(Number(entrada.transformacion_id)) || []
+        rows.push(entrada)
+        entradasPorTransformacion.set(Number(entrada.transformacion_id), rows)
       }
+      const materiasPrimasOrigen = transformacionesOrigen.map((transformation) => ({
+        transformacion: transformation,
+        lotesEntrada: entradasPorTransformacion.get(Number(transformation.transformacion_id)) || [],
+      }))
 
       // 3. Trazabilidad aguas abajo (Downstream): ¿En qué transformaciones participó este lote como ENTRADA?
       const transformacionesDestino = await db.execute(sql`
@@ -124,10 +132,12 @@ function createTrazabilidadModel(db) {
           AND tl_entrada.tipo_participacion = 'ENTRADA'
       `)
 
-      const productosDerivados = []
-      for (const t of transformacionesDestino) {
-        const salidas = await db.execute(sql`
+      const downstreamIds = transformacionesDestino.map((t) => Number(t.transformacion_id))
+      const downstreamFilter = sql.join(downstreamIds.map((id) => sql`${id}`), sql`, `)
+      const salidasDestino = downstreamIds.length
+        ? await db.execute(sql`
           SELECT
+            tl.transformacion_id,
             l.id AS lote_id,
             l.codigo AS lote_codigo,
             l.cantidad_recibida,
@@ -140,15 +150,20 @@ function createTrazabilidadModel(db) {
           FROM transformacion_lotes tl
           JOIN lotes l ON l.id = tl.lote_id
           LEFT JOIN productos pr ON pr.id = l.producto_id
-          WHERE tl.transformacion_id = ${t.transformacion_id}
+          WHERE tl.transformacion_id IN (${downstreamFilter})
             AND tl.tipo_participacion = 'SALIDA'
         `)
-
-        productosDerivados.push({
-          transformacion: t,
-          lotesSalida: salidas,
-        })
+        : []
+      const salidasPorTransformacion = new Map()
+      for (const salida of salidasDestino) {
+        const rows = salidasPorTransformacion.get(Number(salida.transformacion_id)) || []
+        rows.push(salida)
+        salidasPorTransformacion.set(Number(salida.transformacion_id), rows)
       }
+      const productosDerivados = transformacionesDestino.map((transformation) => ({
+        transformacion: transformation,
+        lotesSalida: salidasPorTransformacion.get(Number(transformation.transformacion_id)) || [],
+      }))
 
       // 4. Incidencias registradas en el lote
       const incidenciasLote = await db

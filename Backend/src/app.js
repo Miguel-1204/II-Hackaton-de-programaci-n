@@ -17,6 +17,7 @@ const { createAuthenticationMiddleware } = require('./middlewares/auth.middlewar
 
 // Modelos Kaotrace
 const { createLotesModel } = require('./models/lotes.model')
+const { createProductoresModel: createCatalogoProductoresModel } = require('./models/productores.model')
 const { createTransformacionesModel } = require('./models/transformaciones.model')
 const { createProductosModel } = require('./models/productos.model')
 const { createTrazabilidadModel } = require('./models/trazabilidad.model')
@@ -25,6 +26,8 @@ const { createEstadisticasModel } = require('./models/estadisticas.model')
 
 // Servicios Kaotrace
 const { createTransformacionesService } = require('./services/transformaciones.service')
+const { createProductoresService: createCatalogoProductoresService } = require('./services/productores.service')
+const { createInventarioService } = require('./services/inventario.service')
 const { createProductosService } = require('./services/productos.service')
 const { createTrazabilidadService } = require('./services/trazabilidad.service')
 const { createIncidenciasEstadosService } = require('./services/incidencias-estados.service')
@@ -34,6 +37,8 @@ const { createNlpService } = require('./services/nlp.service')
 
 // Controladores Kaotrace
 const { createTransformacionesController } = require('./controllers/transformaciones.controller')
+const { createProductoresController } = require('./controllers/productores.controller')
+const { createInventarioController } = require('./controllers/inventario.controller')
 const { createCostosProductosController } = require('./controllers/costos-productos.controller')
 const { createTrazabilidadController } = require('./controllers/trazabilidad.controller')
 const { createIncidenciasEstadosController } = require('./controllers/incidencias-estados.controller')
@@ -43,7 +48,10 @@ const { createNlpController } = require('./controllers/nlp.controller')
 
 // Enrutadores Kaotrace
 const { createTransformacionesRouter } = require('./routes/transformaciones.routes')
+const { createProductoresRouter } = require('./routes/productores.routes')
+const { createInventarioRouter } = require('./routes/inventario.routes')
 const { createProductosRouter } = require('./routes/productos.routes')
+const { createProductosPublicosRouter } = require('./routes/productos-publicos.routes')
 const { createTrazabilidadRouter } = require('./routes/trazabilidad.routes')
 const { createIncidenciasEstadosRouter } = require('./routes/incidencias-estados.routes')
 const { createEstadisticasRouter } = require('./routes/estadisticas.routes')
@@ -68,6 +76,8 @@ function createApp({
   jwtSecret,
   tokenExpiresIn,
   transformacionesService,
+  productoresService,
+  inventarioService,
   productosService,
   trazabilidadService,
   incidenciasEstadosService,
@@ -94,6 +104,7 @@ function createApp({
 
   // 2. Capa de Modelos
   const lotesModel = db ? createLotesModel(db) : null
+  const catalogoProductoresModel = db ? createCatalogoProductoresModel(db) : null
   const transformacionesModel = db ? createTransformacionesModel(db) : null
   const productosModel = db ? createProductosModel(db) : null
   const trazabilidadModel = db ? createTrazabilidadModel(db) : null
@@ -106,6 +117,16 @@ function createApp({
     (transformacionesModel && lotesModel
       ? createTransformacionesService({ transformacionesModel, lotesModel })
       : null)
+
+  const resolvedCatalogoProductoresService =
+    productoresService ||
+    (catalogoProductoresModel
+      ? createCatalogoProductoresService({ productoresModel: catalogoProductoresModel })
+      : null)
+
+  const resolvedInventarioService =
+    inventarioService ||
+    (lotesModel ? createInventarioService({ lotesModel }) : null)
 
   const resolvedProductosService =
     productosService ||
@@ -134,7 +155,7 @@ function createApp({
   const resolvedReportesService =
     reportesService ||
     (estadisticasModel
-      ? createReportesService({ estadisticasModel })
+      ? createReportesService({ estadisticasModel, lotesModel })
       : null)
 
   const resolvedNlpService =
@@ -157,8 +178,29 @@ function createApp({
     app.use('/api/auth', createAuthRouter({ controller: authController, authenticate }))
   }
 
+  if (resolvedProductosService) {
+    const publicProductosController = createCostosProductosController(resolvedProductosService)
+    app.use('/api/public/productos', createProductosPublicosRouter(publicProductosController))
+  }
+
   // Montaje de rutas de Kaotrace (exigen autenticación)
   if (authenticate) {
+    if (resolvedCatalogoProductoresService) {
+      const productoresController = createProductoresController(resolvedCatalogoProductoresService)
+      app.use('/api/productores', createProductoresRouter({
+        controller: productoresController,
+        authenticate,
+      }))
+    }
+
+    if (resolvedInventarioService) {
+      const inventarioController = createInventarioController(resolvedInventarioService)
+      app.use('/api', createInventarioRouter({
+        controller: inventarioController,
+        authenticate,
+      }))
+    }
+
     if (resolvedTransformacionesService) {
       const transformacionesController = createTransformacionesController(resolvedTransformacionesService)
       app.use('/api/transformaciones', createTransformacionesRouter({ controller: transformacionesController, authenticate }))

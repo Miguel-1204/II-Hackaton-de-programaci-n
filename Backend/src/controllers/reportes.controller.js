@@ -46,6 +46,39 @@ function createReportesController(reportesService) {
         return next(error)
       }
     },
+
+    async descargarInventarioCsv(request, response, next) {
+      const municipio = request.query.municipio
+      const estado = request.query.estado
+      if (municipio !== undefined && (
+        typeof municipio !== 'string' ||
+        !municipio.trim() ||
+        municipio.length > 150
+      )) {
+        return response.status(400).json({ error: 'municipio debe ser texto de hasta 150 caracteres' })
+      }
+      const allowedStates = ['RECIBIDO', 'PENDIENTE', 'DISPONIBLE', 'LIBERADO', 'BLOQUEADO']
+      if (
+        estado !== undefined &&
+        (typeof estado !== 'string' || !allowedStates.includes(estado.trim().toUpperCase()))
+      ) {
+        return response.status(400).json({ error: 'estado no es válido' })
+      }
+      try {
+        const csv = await reportesService.generateInventarioCsv({
+          municipio: municipio ? `%${municipio.trim()}%` : undefined,
+          estado: estado?.trim().toUpperCase(),
+        })
+        response.setHeader('Content-Type', 'text/csv; charset=utf-8')
+        response.setHeader(
+          'Content-Disposition',
+          `attachment; filename="kaotrace-inventario-${Date.now()}.csv"`,
+        )
+        return response.status(200).send(csv)
+      } catch (error) {
+        return next(error)
+      }
+    },
   }
 }
 

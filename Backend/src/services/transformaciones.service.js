@@ -4,6 +4,47 @@
 
 const { cantidadAKg } = require('../utils/conversion')
 
+function normalizeList(items, fields) {
+  return (items || [])
+    .map((item) => Object.fromEntries(fields.map((field) => [
+      field,
+      field === 'observaciones'
+        ? item[field] || null
+        : field === 'concepto' || field === 'moneda' || field === 'unidad'
+          ? String(item[field] || '').toUpperCase()
+          : Number(item[field]),
+    ])))
+    .sort((left, right) =>
+      JSON.stringify(left).localeCompare(JSON.stringify(right)),
+    )
+}
+
+function sameIdempotentRequest(existing, request) {
+  if (!existing || !Array.isArray(existing.participaciones)) return true
+  const entries = existing.participaciones
+    .filter((item) => item.tipoParticipacion === 'ENTRADA')
+    .map(({ loteId, cantidad, unidad }) => ({ loteId, cantidad, unidad }))
+  const outputs = existing.participaciones
+    .filter((item) => item.tipoParticipacion === 'SALIDA')
+    .map(({ loteId, cantidad, unidad }) => ({ loteId, cantidad, unidad }))
+  const costs = (existing.solicitudInicial?.costos || existing.costos || [])
+    .map(({ concepto, valor, moneda, observaciones }) => ({
+    concepto,
+    valor,
+    moneda,
+    observaciones,
+    }))
+  return existing.codigo === request.codigo &&
+    existing.etapa === request.etapa &&
+    existing.estado === request.estado &&
+    JSON.stringify(normalizeList(entries, ['loteId', 'cantidad', 'unidad'])) ===
+      JSON.stringify(normalizeList(request.lotesEntrada, ['loteId', 'cantidad', 'unidad'])) &&
+    JSON.stringify(normalizeList(outputs, ['loteId', 'cantidad', 'unidad'])) ===
+      JSON.stringify(normalizeList(request.lotesSalida, ['loteId', 'cantidad', 'unidad'])) &&
+    JSON.stringify(normalizeList(costs, ['concepto', 'valor', 'moneda', 'observaciones'])) ===
+      JSON.stringify(normalizeList(request.costos, ['concepto', 'valor', 'moneda', 'observaciones']))
+}
+
 /**
  * Factoría que instancia el servicio de transformaciones.
  *
@@ -39,6 +80,11 @@ function createTransformacionesService({ transformacionesModel, lotesModel }) {
         const existente = await transformacionesModel.findByClaveIdempotencia(data.claveIdempotencia)
         if (existente) {
           const detalle = await transformacionesModel.findById(existente.id)
+          if (!sameIdempotentRequest(detalle, data)) {
+            const err = new Error('La clave de idempotencia ya fue usada con otros datos')
+            err.statusCode = 409
+            throw err
+          }
           return {
             transformacion: detalle,
             merma: detalle?.analiticaMerma || null,
@@ -68,9 +114,14 @@ function createTransformacionesService({ transformacionesModel, lotesModel }) {
 
         // Verificar saldo de inventario si está disponible
         const saldoInfo = await lotesModel.getSaldoInventario(input.loteId)
+        const inputKg = cantidadAKg(input.cantidad, input.unidad)
+        if (inputKg === null) {
+          const err = new Error(`La unidad del lote ${lote.codigo} no es comparable con el inventario`)
+          err.statusCode = 400
+          throw err
+        }
         if (saldoInfo && saldoInfo.saldoInventarioKg !== null) {
-          const inputKg = cantidadAKg(input.cantidad, input.unidad)
-          if (inputKg !== null && saldoInfo.saldoInventarioKg < inputKg) {
+          if (saldoInfo.saldoInventarioKg < inputKg) {
             const err = new Error(
               `Saldo insuficiente en el lote ${lote.codigo}. Saldo disponible: ${saldoInfo.saldoInventarioKg} kg, requerido: ${inputKg} kg`,
             )
@@ -92,10 +143,15 @@ function createTransformacionesService({ transformacionesModel, lotesModel }) {
 
       // 4. Ejecución del registro transaccional
       const result = await transformacionesModel.create(data)
+      if (result.idempotente && !sameIdempotentRequest(result.transformacion, data)) {
+        const err = new Error('La clave de idempotencia ya fue usada con otros datos')
+        err.statusCode = 409
+        throw err
+      }
 
       return {
         ...result,
-        idempotente: false,
+        idempotente: result.idempotente ?? false,
       }
     },
 
@@ -129,4 +185,5 @@ function createTransformacionesService({ transformacionesModel, lotesModel }) {
 
 module.exports = {
   createTransformacionesService,
+  sameIdempotentRequest,
 }

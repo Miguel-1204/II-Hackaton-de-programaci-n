@@ -12,7 +12,7 @@ const PDFDocument = require('pdfkit')
  * @param {Object} dependencies.estadisticasModel - Modelo de estadísticas y vistas analíticas.
  * @returns {Object} Métodos de generación de reportes.
  */
-function createReportesService({ estadisticasModel }) {
+function createReportesService({ estadisticasModel, lotesModel }) {
   if (!estadisticasModel) {
     throw new Error('estadisticasModel es una dependencia obligatoria')
   }
@@ -32,7 +32,14 @@ function createReportesService({ estadisticasModel }) {
      */
     async generateMermaProductorPdf(filters = {}, metadata = {}) {
       const dataRows = await estadisticasModel.getMermasPorProductor(filters)
-      const resumen = await estadisticasModel.getResumenGlobal(filters)
+      const costos = await estadisticasModel.getCostos(filters)
+      const costosPorTransformacion = new Map()
+      for (const costo of costos) {
+        const key = String(costo.transformacion_id)
+        const entries = costosPorTransformacion.get(key) || []
+        entries.push(costo)
+        costosPorTransformacion.set(key, entries)
+      }
 
       return new Promise((resolve, reject) => {
         try {
@@ -74,25 +81,28 @@ function createReportesService({ estadisticasModel }) {
 
           doc.moveDown(1)
 
-          // 3. Resumen Ejecutivo (KPIs)
+          // 3. Resumen Ejecutivo (KPIs) calculado sobre las filas filtradas del reporte
+          const evaluables = dataRows.filter(
+            (row) => row.estado_evaluacion === 'EVALUABLE' && row.entrada_kg !== null,
+          )
+          const totalEntradaKg = evaluables.reduce((sum, row) => sum + Number(row.entrada_kg), 0)
+          const totalSalidaKg = evaluables.reduce((sum, row) => sum + Number(row.salida_kg), 0)
+          const totalMermaKg = totalEntradaKg - totalSalidaKg
+          const mermaGlobal = totalEntradaKg > 0 ? (totalMermaKg / totalEntradaKg) * 100 : 0
+          const alertas = evaluables.filter((row) => row.supera_umbral === true).length
           const startY = 155
-          doc.rect(40, startY, 532, 60).fillAndStroke('#f7f4ef', '#d4c7b8')
+          doc.rect(40, startY, 532, 42).fillAndStroke('#f7f4ef', '#d4c7b8')
           doc.fillColor('#2c1810').fontSize(10).font('Helvetica-Bold')
-            .text('RESUMEN GENERAL DEL PERÍODO', 50, startY + 8)
+            .text('RESUMEN DE LOS REGISTROS FILTRADOS', 50, startY + 8)
 
           doc.fontSize(9).font('Helvetica').fillColor('#333333')
-          const metricas = resumen.metricasProcesamiento
-          doc.text(`Total Entrada: ${metricas.totalEntradaKg.toLocaleString('es-CO')} kg`, 50, startY + 26)
-          doc.text(`Total Salida: ${metricas.totalSalidaKg.toLocaleString('es-CO')} kg`, 180, startY + 26)
-          doc.text(`Merma Acumulada: ${metricas.totalMermaKg.toLocaleString('es-CO')} kg (${metricas.mermaGlobalPorcentaje} %)`, 310, startY + 26)
-          doc.text(`Alertas (> 15%): ${metricas.transformacionesConAlerta}`, 450, startY + 26)
-
-          doc.text(`Lotes en Inventario: ${resumen.inventario.totalLotes} (${resumen.inventario.saldoTotalKg.toLocaleString('es-CO')} kg)`, 50, startY + 42)
-          doc.text(`Lotes Bloqueados: ${resumen.inventario.lotesBloqueados}`, 240, startY + 42)
-          doc.text(`Incidencias Abiertas: ${resumen.incidencias.abiertas}`, 400, startY + 42)
+          doc.text(`Entrada: ${totalEntradaKg.toLocaleString('es-CO')} kg`, 50, startY + 26)
+          doc.text(`Salida: ${totalSalidaKg.toLocaleString('es-CO')} kg`, 180, startY + 26)
+          doc.text(`Merma: ${totalMermaKg.toLocaleString('es-CO')} kg (${mermaGlobal.toFixed(2)} %)`, 310, startY + 26)
+          doc.text(`Alertas (>15%): ${alertas}`, 470, startY + 26)
 
           // 4. Tabla de Detalle por Productor
-          let tableY = startY + 80
+          let tableY = startY + 60
           doc.fillColor('#2c1810').fontSize(11).font('Helvetica-Bold')
             .text('DETALLE DE TRANSFORMACIONES Y EVALUACIÓN DE MERMA POR PRODUCTOR', 40, tableY)
 
@@ -118,7 +128,7 @@ function createReportesService({ estadisticasModel }) {
           } else {
             for (let i = 0; i < dataRows.length; i++) {
               const row = dataRows[i]
-              if (tableY > 700) {
+              if (tableY + 42 > 700) {
                 doc.addPage()
                 tableY = 40
               }
@@ -154,6 +164,33 @@ function createReportesService({ estadisticasModel }) {
               doc.text(row.estado_evaluacion === 'EVALUABLE' ? 'OK' : 'DESC.', 525, tableY + 5, { width: 45, align: 'center' })
 
               tableY += 18
+
+              const involvedLots = Array.isArray(row.lotes_involucrados) ? row.lotes_involucrados : []
+              const costRows = costosPorTransformacion.get(String(row.transformacion_id)) || []
+              const costText = costRows.length
+                ? costRows.map((cost) =>
+                  `${cost.moneda}: ${Number(cost.costo_total).toLocaleString('es-CO', { maximumFractionDigits: 2 })}`,
+                ).join('; ')
+                : 'Sin costos registrados'
+              const evaluationText =
+                `Evaluación: ${row.estado_evaluacion}; umbral: >${Number(row.umbral_porcentaje ?? 15)} %; ` +
+                `supera umbral: ${row.supera_umbral === true ? 'Sí' : row.supera_umbral === false ? 'No' : 'No evaluable'}`
+              const detailLines = involvedLots.map((lot) =>
+                `Lote ${lot.lote_codigo}: ${lot.participacion}, ${lot.cantidad} ${lot.unidad}`,
+              )
+              if (detailLines.length === 0) detailLines.push('Lotes involucrados: detalle no disponible')
+              detailLines.push(evaluationText, `Costos asociados: ${costText}`)
+
+              for (const line of detailLines) {
+                doc.font('Helvetica').fontSize(7.5).fillColor('#555555')
+                const lineHeight = doc.heightOfString(line, { width: 520, lineGap: 1 })
+                if (tableY + lineHeight + 3 > 700) {
+                  doc.addPage()
+                  tableY = 40
+                }
+                doc.text(line, 48, tableY, { width: 520, lineGap: 1 })
+                tableY += lineHeight + 3
+              }
             }
           }
 
@@ -167,6 +204,41 @@ function createReportesService({ estadisticasModel }) {
           reject(error)
         }
       })
+    },
+
+    async generateInventarioCsv(filters = {}) {
+      if (!lotesModel) {
+        throw new Error('lotesModel es requerido para exportar inventario')
+      }
+      const rows = await lotesModel.listInventoryCsv(filters)
+      const headers = [
+        'Identificador',
+        'Código del lote',
+        'Origen',
+        'Cantidad recibida',
+        'Unidad',
+        'Saldo disponible (kg)',
+        'Estado',
+        'Costos asociados',
+      ]
+      const csvCell = (value) => {
+        let text = value === null || value === undefined ? '' : String(value)
+        if (/^[\s]*[=+\-@]/.test(text)) text = `'${text}`
+        return `"${text.replaceAll('"', '""')}"`
+      }
+      const lines = [headers, ...rows.map((row) => [
+        row.id,
+        row.codigo,
+        row.origen,
+        row.cantidadRecibida,
+        row.unidad,
+        row.saldoKg,
+        row.estado,
+        row.costos
+          .map((cost) => `${cost.moneda}: ${Number(cost.total).toFixed(2)}`)
+          .join('; '),
+      ])]
+      return `\uFEFF${lines.map((line) => line.map(csvCell).join(',')).join('\r\n')}\r\n`
     },
   }
 }

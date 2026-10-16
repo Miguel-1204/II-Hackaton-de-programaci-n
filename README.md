@@ -121,12 +121,12 @@ docker compose up --build -d backend
 - `GET /api/auth/me`: requiere `Authorization: Bearer <token>` y devuelve el
   usuario público y los roles consultados en PostgreSQL.
 
-El middleware `requireRoles('ADMINISTRADOR')` permite exigir permisos
-administrativos en las rutas de gestión cuando se implementen. Los roles se
-recargan desde la base de datos al validar cada petición; no se aceptan roles
-declarados por el cliente. Actualmente no existen endpoints de gestión de
-usuarios ni de bloqueo/liberación de lotes, por lo que todavía no hay rutas de
-negocio a las cuales aplicar esos permisos.
+Los roles se recargan desde la base de datos al validar cada petición; no se
+aceptan roles declarados por el cliente. La gestión de productores y el
+bloqueo/liberación de lotes, catálogo de productos, costos, estadísticas,
+reportes y NLP requieren `ADMINISTRADOR`; las recepciones, consultas
+operativas, trazabilidad y transformaciones admiten `ADMINISTRADOR` y
+`OPERADOR`.
 
 Prueba desde Postman:
 
@@ -184,6 +184,81 @@ coincide ese conjunto, la vista marca
 por proporción ni imputa toda la pérdida a un productor. Esta atribución exige
 que el servicio registre correctamente la procedencia de cada lote de salida.
 
+## Productores, recepción e inventario operativo
+
+No hizo falta una migración: `productores`, `lotes` y
+`movimientos_inventario` ya contienen las relaciones, fechas, cantidades,
+unidades, usuario responsable y clave única de idempotencia necesarias. El
+saldo disponible no se duplica en una columna mutable: se calcula desde los
+movimientos con `analitica_inventario_lotes`. Toda recepción crea el lote, su
+movimiento `ENTRADA` y el evento de auditoría en una sola transacción. Un
+reintento con la misma clave devuelve la recepción previa; reutilizar la clave
+con datos distintos devuelve `409`.
+
+- `GET /api/productores`: lista productores activos; admite `search`,
+  `municipio`, `page` y `limit`.
+- `GET /api/productores/:id`: consulta un productor.
+- `POST /api/productores`: crea productor; solo administrador.
+- `PATCH /api/productores/:id`: actualiza nombre, identificación o municipio;
+  solo administrador.
+- `DELETE /api/productores/:id`: desactivación lógica, sin borrar lotes
+  históricos; solo administrador.
+- `POST /api/recepciones`: crea lote y movimiento inicial; requiere
+  `Idempotency-Key` y rol administrador u operador. El cuerpo acepta
+  `productorId`, `codigo`, `cantidad`, `unidad` (`kg`, `g` o `t`), y
+  opcionalmente `fechaRecepcion`, `productoId` y `tipoMaterial`.
+- `GET /api/inventario/lotes`: consulta paginada, filtrable por `productorId`,
+  `municipio`, `estado` y `search`; incluye saldo en kg, total de salidas y
+  estado de bloqueo.
+- `GET /api/inventario/lotes/:id`: consulta lote y saldo disponible.
+- `GET /api/inventario/lotes/:id/movimientos`: historial paginado del libro de
+  movimientos, incluyendo responsable y transformación, sin claves de
+  idempotencia.
+
+Las lecturas requieren autenticación y rol `ADMINISTRADOR` u `OPERADOR`.
+Identificaciones de productores solo se devuelven a administradores. Las
+recepciones exigen productores activos. Antes de registrar una transformación,
+el backend bloquea los lotes en orden de ID y vuelve a comprobar estado y saldo
+dentro de la misma transacción que escribe sus movimientos; así se evita el
+doble consumo concurrente y se conserva la atomicidad entre transformación,
+inventario, costos e incidencias.
+
+Las validaciones de recepción y transformación solo admiten unidades de masa
+comparables y cantidades que caben en `numeric(14,3)`. Los motivos de bloqueo
+permanecen en el historial de estados; este módulo no acepta ni inventa
+observaciones de recepción porque el esquema actual no tiene un campo para
+almacenarlas.
+
+Los cambios de estado aceptan `RECIBIDO`, `PENDIENTE`, `DISPONIBLE`,
+`LIBERADO` o `BLOQUEADO`, preservando los valores ya usados por el proyecto.
+El estado comercial público se deriva de los lotes asociados al producto:
+cualquier lote bloqueado bloquea la ficha; solo lotes liberados/disponibles
+permiten ofrecerlo; en los demás casos aparece como pendiente. No se añadió un
+estado redundante a la tabla `productos`.
+
+## Ficha pública, costos y exportación
+
+- `GET /api/public/productos/:codigo`: ficha sin JWT, limitada a nombre,
+  código, descripción, unidad comercial, municipio de origen, lotes,
+  transformaciones y estado comercial. No devuelve identificación ni nombre
+  privado del productor, precio, costos, usuario, contraseñas ni credenciales.
+  Un producto bloqueado siempre responde `disponible: false`.
+- `GET /api/reportes/inventario.csv`: solo administrador. Acepta filtros
+  opcionales `municipio` y `estado`, consulta PostgreSQL y devuelve CSV UTF-8
+  con BOM, encabezados y campos citados; los costos se agrupan por moneda sin
+  multiplicarse por joins de lotes/transformaciones.
+- `GET /api/productos/:id/margenes`: solo administrador. Calcula el costo por
+  kg de salida y el margen únicamente con costos COP y precio de referencia
+  configurado por kg; sin cantidad comparable, precio positivo o costo COP,
+  deja el margen en `null` en vez de inventar un valor.
+
+Las estadísticas y el PDF ahora son solo administrativos. Los eventos de
+auditoría registran la recepción, creación de transformaciones, los costos
+añadidos y los cambios de estado; los eventos iniciales de transformación
+incluyen responsable, participaciones y costos de esa operación. La lectura de
+trazabilidad agrupa las participaciones relacionadas en consultas por lote,
+no ejecuta una consulta adicional por transformación.
+
 Ejemplos de filtros (aplicados como parámetros de consultas del backend):
 
 ```sql
@@ -209,14 +284,45 @@ WHERE fecha_procesamiento >= $1
 GROUP BY moneda;
 ```
 
-No se persisten PDFs ni preguntas/respuestas. La generación PDF, los filtros,
-el período consultado y la fecha de emisión corresponden al servicio de
-reportes. El intérprete de lenguaje natural aún debe implementarse como
-intenciones/consultas permitidas y parametrizadas sobre estas vistas; no debe
-ejecutar SQL arbitrario generado por un modelo. Sus endpoints deben requerir
-JWT y `requireRoles('ADMINISTRADOR')`. Las vistas no exponen hashes, tokens,
-correos de usuarios ni descripciones de incidencias, pero la autorización se
-debe imponer en el backend, no con la interfaz.
+No se persisten PDFs ni preguntas/respuestas. El PDF presenta los lotes y su
+participación, la evaluación y umbral aplicados, y los costos agregados por
+moneda para las transformaciones incluidas. El resumen se calcula sobre las
+filas filtradas. Se puede filtrar por período, municipio, productor,
+`superaUmbral` y `estadoEvaluacion` (`EVALUABLE`,
+`SIN_ENTRADAS_O_SALIDAS`, `UNIDADES_NO_COMPARABLES` o
+`PRODUCTORES_ENTRADA_SALIDA_NO_COINCIDEN`).
+
+El intérprete NLP usa reglas deterministas e intenciones permitidas sobre
+consultas parametrizadas; no ejecuta SQL arbitrario ni usa una respuesta de un
+modelo para formar SQL. Reconoce, entre otras, mermas superiores al 15 %,
+promedios por municipio, transformaciones con mayor merma, cantidades
+procesadas, costos totales y costo promedio COP/kg, lotes bloqueados e
+incidencias abiertas. Extrae “este mes” y “última semana” (últimos siete días, incluido hoy) usando
+los límites del día en hora de Colombia. Una pregunta que no reconoce recibe `CONSULTA_NO_SOPORTADA`, no
+un resumen distinto. La cantidad procesada es la suma de entradas de
+transformaciones —flujo acumulado por etapas, no cacao único—. El costo
+promedio COP/kg usa únicamente transformaciones evaluables que tienen costo
+COP y cantidad de salida comparable; no asigna costos a municipios o
+productores porque el esquema no registra esa distribución. Las mezclas sin
+atribución sustentada siguen siendo no evaluables.
+
+El endpoint NLP requiere JWT y `requireRoles('ADMINISTRADOR')`; la pregunta
+está limitada a 500 caracteres. Las vistas no exponen hashes, tokens, correos
+de usuarios ni descripciones de incidencias; la autorización se impone en el
+backend.
+
+Ejemplos de uso:
+
+```http
+GET /api/reportes/merma-productor/pdf?fechaDesde=2026-10-01&fechaHasta=2026-10-31&productorId=7&municipio=Rivera&estadoEvaluacion=EVALUABLE
+Authorization: Bearer <token>
+
+POST /api/nlp/consultar
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{"pregunta":"¿Qué productores tuvieron mermas superiores al 15 % este mes?"}
+```
 
 Para probar las vistas contra PostgreSQL, con Docker y los seeds oficiales
 disponibles, ejecuta:
@@ -256,6 +362,14 @@ ni lo duplica.
 - `npm run seed:demo`: cargar productores, lotes y movimientos oficiales.
 - `npm run test:analytics`: probar vistas analíticas contra la base activa, con
   fixtures transaccionales revertidos.
+- `npm run test:inventory`: prueba de integración de recepción idempotente y
+  concurrencia contra PostgreSQL. Usa productor/lote de prueba únicos y elimina
+  únicamente esos registros y movimientos propios al finalizar; requiere seeds
+  de roles y administrador.
+- `npm run test:traceability`: crea y elimina 100 transformaciones sintéticas
+  relacionadas, mide la consulta de trazabilidad y verifica ficha pública,
+  privacidad, estado bloqueado y CSV real en PostgreSQL. Falla si la consulta
+  supera 3 segundos en el entorno donde se ejecuta.
 - `npm test`: ejecutar las pruebas automatizadas del backend.
 
 
