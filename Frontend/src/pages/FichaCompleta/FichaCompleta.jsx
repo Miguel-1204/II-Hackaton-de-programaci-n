@@ -29,14 +29,14 @@ export default function FichaCompleta() {
               onClick={() => navigate("/nuestros-cacaos")}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-cacao-800 font-medium shadow-sm hover:bg-cacao-100 transition-colors"
             >
-              ← Volver al catálogo
+              Volver al catálogo
             </button>
             <div className="flex gap-2 ml-auto">
               <button className="px-4 py-2 rounded-lg bg-white text-cacao-800 font-medium shadow-sm hover:bg-cacao-100 transition-colors">
-                Compartir 🔗
+                Compartir
               </button>
               <button className="px-4 py-2 rounded-lg bg-cacao-800 text-white font-medium shadow-sm hover:bg-cacao-900 transition-colors">
-                Ver QR 📱
+                Ver QR
               </button>
             </div>
           </div>
@@ -54,7 +54,7 @@ export default function FichaCompleta() {
             </div>
             {isBloqueado && (
               <div className="mt-4 p-4 bg-mazorca-50 border border-mazorca-200 rounded-lg text-mazorca-700 text-sm">
-                ⚠️ Este producto no está disponible para comercialización actualmente.
+                Este producto no está disponible para comercialización actualmente.
               </div>
             )}
           </div>
@@ -67,9 +67,7 @@ export default function FichaCompleta() {
           <div className="space-y-6">
             {trazabilidad.map((paso, i) => (
               <div key={i} className="bg-white p-6 rounded-xl border border-cacao-100 shadow-sm">
-                <div className="flex items-start gap-4">
-                  <span className="text-2xl">{paso.icono}</span>
-                  <div>
+                <div>
                     <h3 className="font-bold text-cacao-800 mb-2">{paso.paso}</h3>
                     {paso.productor && (
                       <p className="text-cacao-600 mb-1"><strong>Productor:</strong> {paso.productor}</p>
@@ -100,7 +98,6 @@ export default function FichaCompleta() {
                     )}
                   </div>
                 </div>
-              </div>
             ))}
           </div>
         </section>
@@ -108,7 +105,7 @@ export default function FichaCompleta() {
         <section className="mb-8">
           <div className="bg-cacao-100 p-6 rounded-xl border border-cacao-200">
             <h2 className="font-display text-2xl font-bold text-cacao-800 mb-4 flex items-center gap-2">
-              💰 Información Comercial Pública
+              Información Comercial Pública
             </h2>
             <div className="space-y-3">
               <p className="text-cacao-700"><strong>Presentación disponible:</strong> {comercial.presentacion}</p>
