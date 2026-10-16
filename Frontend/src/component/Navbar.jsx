@@ -29,7 +29,7 @@ export default function Navbar() {
 
           {/* Enlaces de navegación (Centro) */}
           <nav aria-label="Navegación principal" className="hidden md:flex space-x-12">
-            <Link to="/nosotros" className="text-lg font-semibold text-cacao-700 hover:text-cacao-900 transition-colors">
+            <Link to="II-Hackaton-de-programaci-n/nosotros" className="text-lg font-semibold text-cacao-700 hover:text-cacao-900 transition-colors">
               Nosotros
             </Link>
             <Link
