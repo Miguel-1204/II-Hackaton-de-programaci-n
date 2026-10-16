@@ -1,0 +1,61 @@
+/* Botones: sencillos, con borde. El principal va relleno de café */
+.op-boton {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--color-cacao-500);
+  border-radius: 0.375rem;
+  background: white;
+  color: var(--color-cacao-800);
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.op-boton:hover {
+  background: var(--color-cacao-100);
+}
+.op-boton:focus-visible,
+.op-enlace:focus-visible {
+  outline: 2px solid var(--color-mazorca-500);
+  outline-offset: 2px;
+}
+.op-boton-principal {
+  background: var(--color-cacao-800);
+  border-color: var(--color-cacao-800);
+  color: var(--color-cacao-50);
+}
+.op-boton-principal:hover {
+  background: var(--color-cacao-900);
+}
+
+/* Aviso: caja simple con borde rojo, el texto ya explica el motivo */
+.op-aviso {
+  border: 1px solid var(--color-peligro-600);
+  border-radius: 0.375rem;
+  background: white;
+  padding: 0.75rem 1rem;
+}
+
+/* Tabla: solo líneas horizontales finas */
+.op-tabla th,
+.op-tabla td {
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--color-cacao-200);
+  white-space: nowrap;
+}
+.op-tabla thead th {
+  border-bottom: 2px solid var(--color-cacao-500);
+  color: var(--color-cacao-700);
+  font-weight: 600;
+}
+.op-tabla tbody th {
+  color: var(--color-cacao-800);
+  font-weight: 600;
+}
+
+.op-enlace {
+  color: var(--color-cacao-700);
+  text-decoration: underline;
+}
+.op-enlace:hover {
+  color: var(--color-cacao-900);
+}
