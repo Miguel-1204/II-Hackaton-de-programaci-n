@@ -8,6 +8,7 @@ import FichaCompleta from "./pages/FichaCompleta/FichaCompleta";
 import RutaProtegida from './component/RutaProtegida'
 import PanelLayout from './layouts/PanelLayout'
 import DashboardOperador from './pages/DashboardOperador/DashboardOperador'
+import Lotes from './pages/Lotes/Lotes'
 
 export default function App() {
   return (
@@ -18,23 +19,23 @@ export default function App() {
         <Route path="/nuestros-cacaos" element={<NuestrosCacaos />} />
         <Route path="/nosotros" element={<Nosotros />} />
         <Route path="/ficha-completa/:id" element={<FichaCompleta />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
 
         {/* Solo operador */}
-      <Route element={<RutaProtegida roles={['operador']} />}>
-        <Route element={<PanelLayout />}>
-          <Route path="/operador" element={<DashboardOperador />} />
+        <Route element={<RutaProtegida roles={['operador']} />}>
+          <Route element={<PanelLayout />}>
+            <Route path="/operador" element={<DashboardOperador />} />
+          </Route>
         </Route>
-      </Route>
 
-      {/* Operador y administrador: se irán sumando aquí */}
-      <Route element={<RutaProtegida roles={['operador', 'administrador']} />}>
-        <Route element={<PanelLayout />}>
-          {/* /lotes, /lotes/nuevo, /lotes/:id, /transformaciones/nueva */}
+        {/* Operador y administrador */}
+        <Route element={<RutaProtegida roles={['operador', 'administrador']} />}>
+          <Route element={<PanelLayout />}>
+            <Route path="/lotes" element={<Lotes />} />
+            <Route path="/admin" element={<Lotes userRole="admin" />} />
+          </Route>
         </Route>
-      </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </ToastProvider>
   );
