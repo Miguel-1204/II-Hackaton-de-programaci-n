@@ -1,0 +1,132 @@
+/**
+ * @fileoverview Servicio de negocio para la gestión de transformaciones, validación de inventario e idempotencia.
+ */
+
+const { cantidadAKg } = require('../utils/conversion')
+
+/**
+ * Factoría que instancia el servicio de transformaciones.
+ *
+ * @param {Object} dependencies - Dependencias inyectadas.
+ * @param {Object} dependencies.transformacionesModel - Modelo de transformaciones.
+ * @param {Object} dependencies.lotesModel - Modelo de lotes.
+ * @returns {Object} Métodos de negocio para transformaciones.
+ */
+function createTransformacionesService({ transformacionesModel, lotesModel }) {
+  if (!transformacionesModel || !lotesModel) {
+    throw new Error('transformacionesModel y lotesModel son dependencias obligatorias')
+  }
+
+  return {
+    /**
+     * Registra un proceso de transformación validando existencias, estado de los lotes e idempotencia.
+     *
+     * @param {Object} data - Datos de la transformación validados.
+     * @param {string} data.codigo - Código único del proceso.
+     * @param {string} data.etapa - Etapa (ej. FERMENTACION, SECADO, TOSTADO).
+     * @param {number} data.responsableId - ID del usuario responsable.
+     * @param {string} [data.observaciones] - Observaciones técnicas.
+     * @param {string} data.estado - Estado de la transformación.
+     * @param {string} [data.claveIdempotencia] - Clave de idempotencia única.
+     * @param {Array<{ loteId: number, cantidad: number, unidad: string }>} data.lotesEntrada - Lotes de entrada.
+     * @param {Array<{ loteId: number, cantidad: number, unidad: string }>} data.lotesSalida - Lotes de salida.
+     * @param {Array<Object>} [data.costos] - Costos iniciales.
+     * @returns {Promise<{ transformacion: Object, merma: Object|null, alertaGenerada: boolean, idempotente: boolean }>}
+     */
+    async createTransformacion(data) {
+      // 1. Verificación de idempotencia previa
+      if (data.claveIdempotencia) {
+        const existente = await transformacionesModel.findByClaveIdempotencia(data.claveIdempotencia)
+        if (existente) {
+          const detalle = await transformacionesModel.findById(existente.id)
+          return {
+            transformacion: detalle,
+            merma: detalle?.analiticaMerma || null,
+            alertaGenerada: false,
+            idempotente: true,
+          }
+        }
+      }
+
+      // 2. Validación de existencia y disponibilidad de lotes de entrada
+      for (const input of data.lotesEntrada) {
+        const lote = await lotesModel.findById(input.loteId)
+        if (!lote) {
+          const err = new Error(`El lote de entrada con ID ${input.loteId} no existe en el sistema`)
+          err.statusCode = 404
+          throw err
+        }
+
+        // Verificar si el lote está bloqueado
+        if (lote.estado === 'BLOQUEADO') {
+          const err = new Error(
+            `El lote de entrada ${lote.codigo} (ID: ${lote.id}) se encuentra BLOQUEADO por aseguramiento de calidad y no puede ser procesado`,
+          )
+          err.statusCode = 400
+          throw err
+        }
+
+        // Verificar saldo de inventario si está disponible
+        const saldoInfo = await lotesModel.getSaldoInventario(input.loteId)
+        if (saldoInfo && saldoInfo.saldoInventarioKg !== null) {
+          const inputKg = cantidadAKg(input.cantidad, input.unidad)
+          if (inputKg !== null && saldoInfo.saldoInventarioKg < inputKg) {
+            const err = new Error(
+              `Saldo insuficiente en el lote ${lote.codigo}. Saldo disponible: ${saldoInfo.saldoInventarioKg} kg, requerido: ${inputKg} kg`,
+            )
+            err.statusCode = 400
+            throw err
+          }
+        }
+      }
+
+      // 3. Validación de lotes de salida
+      for (const output of data.lotesSalida) {
+        const lote = await lotesModel.findById(output.loteId)
+        if (!lote) {
+          const err = new Error(`El lote de salida con ID ${output.loteId} no existe en el sistema`)
+          err.statusCode = 404
+          throw err
+        }
+      }
+
+      // 4. Ejecución del registro transaccional
+      const result = await transformacionesModel.create(data)
+
+      return {
+        ...result,
+        idempotente: false,
+      }
+    },
+
+    /**
+     * Consulta una transformación por su ID.
+     *
+     * @param {number} id - ID de la transformación.
+     * @returns {Promise<Object>} Detalle de la transformación.
+     */
+    async getTransformacionById(id) {
+      const trans = await transformacionesModel.findById(id)
+      if (!trans) {
+        const err = new Error(`Transformación con ID ${id} no encontrada`)
+        err.statusCode = 404
+        throw err
+      }
+      return trans
+    },
+
+    /**
+     * Lista transformaciones registradas.
+     *
+     * @param {number} [limit=50] - Cantidad máxima a listar.
+     * @returns {Promise<Array<Object>>}
+     */
+    async listTransformaciones(limit = 50) {
+      return await transformacionesModel.list(limit)
+    },
+  }
+}
+
+module.exports = {
+  createTransformacionesService,
+}
