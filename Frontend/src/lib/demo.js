@@ -3,8 +3,20 @@
 export const MODO_DEMO = import.meta.env.VITE_MODO_DEMO === "true";
 
 export const USUARIOS_DEMO = [
-  { id: "demo-op-1", username: "operador1", password: "operador123", rol: "operador" },
-  { id: "demo-ad-1", username: "admin1", password: "admin123", rol: "administrador" },
+  {
+    id: "demo-op-1",
+    username: "operador1",
+    password: "operador123",
+    nombre: "Operador Demo",
+    roles: ["operador"],
+  },
+  {
+    id: "demo-ad-1",
+    username: "admin1",
+    password: "admin123",
+    nombre: "Administrador Demo",
+    roles: ["administrador"],
+  },
 ];
 
 // Datos de ejemplo basados en los lotes del caso
