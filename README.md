@@ -97,6 +97,50 @@ que recibe cada movimiento inicial. Puedes ejecutar `seed:roles` de nuevo sin
 duplicar roles. El seed de administrador no reemplaza nombre, correo ni
 contraseña de una cuenta existente.
 
+## Autenticación y permisos
+
+Configura `JWT_SECRET` en `Backend/.env` como una clave aleatoria de al menos
+32 bytes; no reutilices la contraseña de la base de datos ni la incluyas en
+Git. En PowerShell puedes generar una así:
+
+```powershell
+[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
+```
+
+Copia el resultado como valor de `JWT_SECRET` en `Backend/.env`. `JWT_EXPIRES_IN`
+es opcional y usa `15m` por defecto; los valores admitidos son segundos,
+minutos, horas o días, hasta 30 días. Reconstruye/recrea el backend para que
+Docker cargue la nueva configuración:
+
+```powershell
+docker compose up --build -d backend
+```
+
+- `POST /api/auth/login`: JSON `{ "email": "...", "password": "..." }`;
+  responde con un JWT Bearer, expiración y datos públicos del usuario.
+- `GET /api/auth/me`: requiere `Authorization: Bearer <token>` y devuelve el
+  usuario público y los roles consultados en PostgreSQL.
+
+El middleware `requireRoles('ADMINISTRADOR')` permite exigir permisos
+administrativos en las rutas de gestión cuando se implementen. Los roles se
+recargan desde la base de datos al validar cada petición; no se aceptan roles
+declarados por el cliente. Actualmente no existen endpoints de gestión de
+usuarios ni de bloqueo/liberación de lotes, por lo que todavía no hay rutas de
+negocio a las cuales aplicar esos permisos.
+
+Prueba desde Postman:
+
+1. Envía `POST http://localhost:3000/api/auth/login` con `Content-Type:
+   application/json` y cuerpo JSON con el correo y contraseña del administrador
+   creado por el seed.
+2. Copia `token` de la respuesta.
+3. Envía `GET http://localhost:3000/api/auth/me` con
+   `Authorization: Bearer <token>`.
+
+Las credenciales incorrectas responden `401`; entrada mal formada, `400`;
+token ausente, inválido o expirado, `401`; y usuario autenticado sin rol
+requerido, `403`.
+
 ## Estrategia para los datos oficiales iniciales
 
 Los registros de demostración se mantienen separados del esquema y de la
