@@ -1,0 +1,21 @@
+/* ====== Vista "Ficha Completa" del producto ====== */
+
+/* Tarjetas de trazabilidad */
+.ficha-trazabilidad-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ficha-trazabilidad-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* Estado bloqueado */
+.estado-bloqueado-alerta {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
