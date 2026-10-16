@@ -579,14 +579,22 @@ function createReportesService({ estadisticasModel, lotesModel, nlpService }) {
 
       return new Promise((resolve, reject) => {
         try {
-          const doc = new PDFDocument({ size: 'LETTER', margin: 40, bufferPages: true })
+          // Consultas con muchas columnas necesitan espacio para encabezados
+          // y valores largos; A3 apaisado evita comprimir la tipografía.
+          const wideTable = columns.length > 8
+          const doc = new PDFDocument({
+            size: wideTable ? 'A3' : 'LETTER',
+            layout: wideTable ? 'landscape' : 'portrait',
+            margin: 40,
+            bufferPages: true,
+          })
           const chunks = []
           doc.on('data', (chunk) => chunks.push(chunk))
           doc.on('end', () => resolve(Buffer.concat(chunks)))
           doc.on('error', reject)
 
           const left = 40
-          const width = 532
+          const width = doc.page.width - left * 2
           doc.rect(left, 40, width, 52).fill('#2c1810')
           doc.fillColor('#ffffff').fontSize(14).font('Helvetica-Bold')
             .text('ASOCIACIÓN CACAOTERA DEL HUILA - KAOTRACE', 50, 52)
@@ -624,41 +632,57 @@ function createReportesService({ estadisticasModel, lotesModel, nlpService }) {
 
           if (columns.length) {
             const columnWidth = width / columns.length
+            const cellPadding = 5
+            const bottomLimit = doc.page.height - 45
+            const headerLabel = (column) => column
+              .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+              .replaceAll('_', ' ')
+              .replace(/\s+/g, ' ')
+              .trim()
             const drawHeader = () => {
-              doc.rect(left, y, width, 20).fill('#5a3825')
-              doc.fillColor('#ffffff').fontSize(7).font('Helvetica-Bold')
+              const headerHeight = wideTable ? 40 : 30
+              doc.rect(left, y, width, headerHeight).fill('#5a3825')
+              doc.fillColor('#ffffff').fontSize(8).font('Helvetica-Bold')
               columns.forEach((column, index) => {
-                doc.text(column, left + index * columnWidth + 3, y + 6, {
+                doc.text(headerLabel(column), left + index * columnWidth + 3, y + 5, {
                   width: columnWidth - 6,
-                  lineBreak: false,
-                  ellipsis: true,
+                  height: headerHeight - 8,
+                  lineGap: 1,
                 })
               })
-              y += 20
+              y += headerHeight
             }
             drawHeader()
             rows.forEach((row, rowIndex) => {
-              if (y > 730) {
-                doc.addPage()
-                y = 45
-                drawHeader()
-              }
-              if (rowIndex % 2 === 0) doc.rect(left, y, width, 18).fill('#faf8f5')
-              doc.fillColor('#222222').font('Helvetica').fontSize(7)
-              columns.forEach((column, index) => {
+              const cells = columns.map((column) => {
                 const value = row[column]
-                const text = value === null || value === undefined
+                return value === null || value === undefined
                   ? '-'
                   : typeof value === 'object'
                     ? JSON.stringify(value)
                     : String(value)
-                doc.text(text, left + index * columnWidth + 3, y + 5, {
+              })
+              doc.font('Helvetica').fontSize(8)
+              const cellHeights = cells.map((value) => doc.heightOfString(value, {
+                width: columnWidth - cellPadding * 2,
+                lineGap: 1,
+              }))
+              const rowHeight = Math.max(wideTable ? 28 : 24, ...cellHeights.map((height) => height + cellPadding * 2))
+              if (y + rowHeight > bottomLimit) {
+                doc.addPage()
+                y = 45
+                drawHeader()
+              }
+              if (rowIndex % 2 === 0) doc.rect(left, y, width, rowHeight).fill('#faf8f5')
+              doc.fillColor('#222222').font('Helvetica').fontSize(8)
+              cells.forEach((text, index) => {
+                doc.text(text, left + index * columnWidth + cellPadding, y + cellPadding, {
                   width: columnWidth - 6,
-                  lineBreak: false,
-                  ellipsis: true,
+                  height: rowHeight - cellPadding * 2,
+                  lineGap: 1,
                 })
               })
-              y += 18
+              y += rowHeight
             })
           }
           doc.end()
