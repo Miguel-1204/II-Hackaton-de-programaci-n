@@ -9,6 +9,7 @@ import RutaProtegida from './component/RutaProtegida'
 import PanelLayout from './layouts/PanelLayout'
 import DashboardOperador from './pages/DashboardOperador/DashboardOperador'
 import LoteNuevo from './pages/LoteNuevo/LoteNuevo'
+import TransformacionNueva from './pages/TransformacionNueva/TransformacionNueva'
 
 export default function App() {
   return (
@@ -32,7 +33,8 @@ export default function App() {
       <Route element={<RutaProtegida roles={['operador', 'administrador']} />}>
         <Route element={<PanelLayout />}>
           <Route path="/lotes/nuevo" element={<LoteNuevo />} />
-          {/* /lotes, /lotes/:id, /transformaciones/nueva */}
+          <Route path="/transformaciones/nueva" element={<TransformacionNueva />} />
+          {/* /lotes, /lotes/:id */}
         </Route>
       </Route>
 
