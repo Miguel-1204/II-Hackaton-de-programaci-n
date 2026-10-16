@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { obtenerLotes, LOTES_INICIALES } from '../../services/lotesService'
+import { IconInbox, IconGear, IconSparkle, IconAlert, IconSearch } from '../../component/Icons'
 import './DashboardOperador.css'
 
 const formatKg = (n) => `${Number(n ?? 0).toLocaleString('es-CO')} kg`
@@ -85,7 +86,7 @@ export default function DashboardOperador() {
             <div className="bg-white p-5 rounded-2xl border border-cacao-200/80 shadow-xs flex flex-col justify-between">
               <div className="flex items-center justify-between text-cacao-600 text-xs font-semibold uppercase tracking-wider">
                 <span>TOTAL RECIBIDO</span>
-                <span className="text-lg">📥</span>
+                <IconInbox className="w-5 h-5 text-cacao-400" />
               </div>
               <div className="mt-3">
                 <span className="text-2xl md:text-3xl font-bold text-cacao-950">
@@ -99,7 +100,7 @@ export default function DashboardOperador() {
             <div className="bg-white p-5 rounded-2xl border border-cacao-200/80 shadow-xs flex flex-col justify-between">
               <div className="flex items-center justify-between text-cacao-600 text-xs font-semibold uppercase tracking-wider">
                 <span>CONSUMIDO</span>
-                <span className="text-lg">⚙️</span>
+                <IconGear className="w-5 h-5 text-cacao-400" />
               </div>
               <div className="mt-3">
                 <span className="text-2xl md:text-3xl font-bold text-cacao-700">
@@ -113,7 +114,7 @@ export default function DashboardOperador() {
             <div className="bg-emerald-50/60 p-5 rounded-2xl border border-emerald-200 shadow-xs flex flex-col justify-between">
               <div className="flex items-center justify-between text-emerald-800 text-xs font-semibold uppercase tracking-wider">
                 <span>DISPONIBLE BODEGA</span>
-                <span className="text-lg">✨</span>
+                <IconSparkle className="w-5 h-5 text-emerald-500" />
               </div>
               <div className="mt-3">
                 <span className="text-2xl md:text-3xl font-black text-emerald-900">
@@ -127,7 +128,7 @@ export default function DashboardOperador() {
             <div className="bg-white p-5 rounded-2xl border border-cacao-200/80 shadow-xs flex flex-col justify-between">
               <div className="flex items-center justify-between text-cacao-600 text-xs font-semibold uppercase tracking-wider">
                 <span>ALERTAS CRÍTICAS</span>
-                <span className="text-lg">⚠️</span>
+                <IconAlert className="w-5 h-5 text-peligro-600" />
               </div>
               <div className="mt-3">
                 <span className="text-2xl md:text-3xl font-bold text-peligro-600">
@@ -147,7 +148,7 @@ export default function DashboardOperador() {
               >
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-2.5 text-peligro-600">
-                    <span className="text-xl">⚠️</span>
+                    <IconAlert className="w-5 h-5" />
                     <h2 id="alertas-mermas-titulo" className="text-sm md:text-base font-bold text-peligro-600 tracking-tight">
                       RF04: Alertas de Mermas Superiores al 15% ({alertasMermaCritica.length} lotes afectados)
                     </h2>

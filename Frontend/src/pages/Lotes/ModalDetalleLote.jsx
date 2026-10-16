@@ -1,4 +1,5 @@
 import BadgeEstado from '../../component/BadgeEstado'
+import { IconPackage, IconChart, IconAlert, IconTrendingDown, IconClipboard, IconGear } from '../../component/Icons'
 
 const formatKg = (n) => `${Number(n ?? 0).toLocaleString('es-CO')} kg`
 const formatCop = (n) => `$ ${Number(n ?? 0).toLocaleString('es-CO')} COP`
@@ -24,7 +25,7 @@ export default function ModalDetalleLote({ abierto, lote, alCerrar, esAdmin, alA
         <div className="flex items-center justify-between px-6 py-4 bg-cacao-900 text-white shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-mazorca-500/20 text-mazorca-400 font-bold flex items-center justify-center text-xl">
-              🍫
+              <IconPackage className="text-mazorca-400" />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -55,7 +56,7 @@ export default function ModalDetalleLote({ abierto, lote, alCerrar, esAdmin, alA
           {/* Card Resumen de Inventario (RF08) */}
           <div className="bg-white p-4 rounded-xl border border-cacao-200 shadow-xs">
             <h3 className="text-xs font-bold text-cacao-800 uppercase tracking-wider mb-3 flex items-center gap-2">
-              <span>⚖️</span> RF08: Balance de Inventario
+              <IconChart className="w-4 h-4" /> RF08: Balance de Inventario
             </h3>
             <div className="grid grid-cols-3 gap-3 text-center mb-3">
               <div className="p-2.5 rounded-lg bg-cacao-50 border border-cacao-100">
@@ -93,7 +94,7 @@ export default function ModalDetalleLote({ abierto, lote, alCerrar, esAdmin, alA
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-white p-4 rounded-xl border border-cacao-200 shadow-xs space-y-2">
               <h3 className="text-xs font-bold text-cacao-800 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                <span>📍</span> Origen y Productor
+                <IconPackage className="w-4 h-4" /> Origen y Productor
               </h3>
               <p className="text-sm text-cacao-900">
                 <strong className="text-cacao-700">Productor:</strong> {lote.productor?.nombre}
@@ -111,7 +112,7 @@ export default function ModalDetalleLote({ abierto, lote, alCerrar, esAdmin, alA
 
             <div className="bg-white p-4 rounded-xl border border-cacao-200 shadow-xs space-y-2">
               <h3 className="text-xs font-bold text-cacao-800 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                <span>🌱</span> Especificaciones Técnicas
+                <IconPin className="w-4 h-4" /> Especificaciones Técnicas
               </h3>
               <p className="text-sm text-cacao-900">
                 <strong className="text-cacao-700">Tipo de Grano:</strong> {lote.tipo_material}
@@ -147,11 +148,11 @@ export default function ModalDetalleLote({ abierto, lote, alCerrar, esAdmin, alA
               <h3 className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
                 {lote.merma_porcentaje > 15 ? (
                   <span className="text-peligro-600 flex items-center gap-1">
-                    <span>⚠️</span> RF04: Alerta de Merma Crítica (&gt; 15%)
+                    <IconAlert className="w-4 h-4" /> RF04: Alerta de Merma Crítica (&gt; 15%)
                   </span>
                 ) : (
                   <span className="text-cacao-800 flex items-center gap-1">
-                    <span>📉</span> Control de Merma del Lote
+                    <IconTrendingDown className="w-4 h-4" /> Control de Merma del Lote
                   </span>
                 )}
               </h3>
@@ -179,7 +180,7 @@ export default function ModalDetalleLote({ abierto, lote, alCerrar, esAdmin, alA
             <div className="bg-white p-4 rounded-xl border border-cacao-200 shadow-xs">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-xs font-bold text-cacao-800 uppercase tracking-wider flex items-center gap-1.5">
-                  <span>📜</span> Auditoría e Historial de Estados (RF09)
+                  <IconClipboard className="w-4 h-4" /> Auditoría e Historial de Estados (RF09)
                 </h3>
                 <span className="text-[11px] text-cacao-500">
                   {(lote.historial_estados || []).length} registros
@@ -222,7 +223,7 @@ export default function ModalDetalleLote({ abierto, lote, alCerrar, esAdmin, alA
                 }}
                 className="px-4 py-2 rounded-lg bg-cacao-800 hover:bg-cacao-900 text-white font-semibold text-xs transition cursor-pointer flex items-center gap-1.5"
               >
-                <span>⚙️</span>
+                <IconGear className="w-4 h-4" />
                 <span>Cambiar Estado (Bloquear / Liberar)</span>
               </button>
             )}

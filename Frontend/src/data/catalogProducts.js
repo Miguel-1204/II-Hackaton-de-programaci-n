@@ -17,14 +17,14 @@ export const catalogProducts = [
     trazabilidad: [
       {
         paso: 'Origen',
-        icono: '📦',
+        icono: 'package',
         productor: 'Productor A (Rivera, Huila)',
         fechaRecepcion: '15 de marzo de 2026',
         cantidadRecibida: '100 kg de cacao seco',
       },
       {
         paso: 'Transformación',
-        icono: '⚙️',
+        icono: 'gear',
         etapa: 'Fermentación y secado',
         fecha: '18 de marzo de 2026',
         entrada: '100 kg',
@@ -35,7 +35,7 @@ export const catalogProducts = [
       },
       {
         paso: 'Producto Terminado',
-        icono: '✅',
+        icono: 'check',
         descripcion: 'El lote ha completado su proceso y está listo para la venta.',
       },
     ],
@@ -61,14 +61,14 @@ export const catalogProducts = [
     trazabilidad: [
       {
         paso: 'Origen',
-        icono: '📦',
+        icono: 'package',
         productor: 'Productor A (Rivera, Huila)',
         fechaRecepcion: '10 de marzo de 2026',
         cantidadRecibida: '50 kg de cacao seco',
       },
       {
         paso: 'Transformación',
-        icono: '⚙️',
+        icono: 'gear',
         etapa: 'Tostado y molido',
         fecha: '14 de marzo de 2026',
         entrada: '50 kg',
@@ -79,7 +79,7 @@ export const catalogProducts = [
       },
       {
         paso: 'Producto Terminado',
-        icono: '✅',
+        icono: 'check',
         descripcion: 'El lote ha completado su proceso y está listo para la venta.',
       },
     ],
@@ -105,14 +105,14 @@ export const catalogProducts = [
     trazabilidad: [
       {
         paso: 'Origen',
-        icono: '📦',
+        icono: 'package',
         productor: 'Productor B (Rivera, Huila)',
         fechaRecepcion: '05 de marzo de 2026',
         cantidadRecibida: '20 kg de cacao fino',
       },
       {
         paso: 'Transformación',
-        icono: '⚙️',
+        icono: 'gear',
         etapa: 'Molienda y refinamiento',
         fecha: '09 de marzo de 2026',
         entrada: '20 kg',
@@ -123,7 +123,7 @@ export const catalogProducts = [
       },
       {
         paso: 'Producto Terminado',
-        icono: '✅',
+        icono: 'check',
         descripcion: 'El lote ha completado su proceso y está listo para la venta.',
       },
     ],
@@ -149,14 +149,14 @@ export const catalogProducts = [
     trazabilidad: [
       {
         paso: 'Origen',
-        icono: '📦',
+        icono: 'package',
         productor: 'Productor A (Rivera, Huila)',
         fechaRecepcion: '01 de marzo de 2026',
         cantidadRecibida: '30 kg de cacao seco',
       },
       {
         paso: 'Transformación',
-        icono: '⚙️',
+        icono: 'gear',
         etapa: 'Conchado y templado',
         fecha: '06 de marzo de 2026',
         entrada: '30 kg',
@@ -167,7 +167,7 @@ export const catalogProducts = [
       },
       {
         paso: 'Producto Terminado',
-        icono: '✅',
+        icono: 'check',
         descripcion: 'El lote ha completado su proceso y está listo para la venta.',
       },
     ],
@@ -193,14 +193,14 @@ export const catalogProducts = [
     trazabilidad: [
       {
         paso: 'Origen',
-        icono: '📦',
+        icono: 'package',
         productor: 'Productor C (Rivera, Huila)',
         fechaRecepcion: '20 de febrero de 2026',
         cantidadRecibida: '40 kg de cacao seco',
       },
       {
         paso: 'Transformación',
-        icono: '⚙️',
+        icono: 'gear',
         etapa: 'Prensado en frío',
         fecha: '25 de febrero de 2026',
         entrada: '40 kg',
@@ -211,7 +211,7 @@ export const catalogProducts = [
       },
       {
         paso: 'Producto Terminado',
-        icono: '✅',
+        icono: 'check',
         descripcion: 'El lote ha completado su proceso y está listo para la venta.',
       },
     ],
@@ -237,14 +237,14 @@ export const catalogProducts = [
     trazabilidad: [
       {
         paso: 'Origen',
-        icono: '📦',
+        icono: 'package',
         productor: 'Productor A (Rivera, Huila)',
         fechaRecepcion: '12 de marzo de 2026',
         cantidadRecibida: '35 kg de cacao seco',
       },
       {
         paso: 'Transformación',
-        icono: '⚙️',
+        icono: 'gear',
         etapa: 'Mezcla con leche en polvo y azúcar',
         fecha: '17 de marzo de 2026',
         entrada: '35 kg',
@@ -255,7 +255,7 @@ export const catalogProducts = [
       },
       {
         paso: 'Producto Terminado',
-        icono: '✅',
+        icono: 'check',
         descripcion: 'El lote ha completado su proceso y está listo para la venta.',
       },
     ],

@@ -6,6 +6,7 @@ import {
   MUNICIPIOS_HUILA,
   obtenerLotes
 } from '../../services/lotesService'
+import { IconSearch, IconDownload, IconCheck, IconX, IconPackage } from '../../component/Icons'
 
 const formatKg = (n) => `${Number(n ?? 0).toLocaleString('es-CO')} kg`
 
@@ -144,7 +145,9 @@ export default function Lotes() {
               : 'bg-cacao-900 text-cacao-50 border-cacao-700'
           }`}
         >
-          <span>{mensajeToast.tipo === 'error' ? '❌' : '✅'}</span>
+          {mensajeToast.tipo === 'error'
+            ? <IconX className="w-4 h-4 text-peligro-600" />
+            : <IconCheck className="w-4 h-4 text-emerald-400" />}
           <span>{mensajeToast.texto}</span>
         </div>
       )}
@@ -156,7 +159,7 @@ export default function Lotes() {
       >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <span className="text-xl">🔍</span>
+            <IconSearch className="w-4 h-4 text-cacao-500" />
             <h2 className="text-sm font-bold text-cacao-900 uppercase tracking-wider">
               RF11: FILTROS DE TRAZABILIDAD E INVENTARIO
             </h2>
@@ -169,9 +172,7 @@ export default function Lotes() {
             className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs md:text-sm font-semibold rounded-lg shadow-2xs hover:shadow-xs transition flex items-center justify-center gap-2 cursor-pointer self-start sm:self-auto"
             title="Exportar archivo CSV con los datos actualmente filtrados"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
+            <IconDownload className="w-4 h-4" />
             <span>Exportar CSV ({lotesFiltrados.length})</span>
           </button>
         </div>
@@ -191,7 +192,7 @@ export default function Lotes() {
                 placeholder="Ej. CAC001, Rivera, Silva..."
                 className="w-full px-3 py-2.5 pl-9 bg-[#FDF8F5] border border-cacao-200 rounded-xl text-xs text-cacao-900 focus:bg-white focus:ring-2 focus:ring-cacao-500 focus:outline-hidden"
               />
-              <span className="absolute left-3 top-3 text-cacao-400 text-xs">🔎</span>
+              <IconSearch className="w-3.5 h-3.5 absolute left-3 top-3 text-cacao-400" />
             </div>
           </div>
 
@@ -273,7 +274,7 @@ export default function Lotes() {
           </div>
         ) : lotesFiltrados.length === 0 ? (
           <div className="p-8 text-center bg-white rounded-2xl border border-cacao-200 space-y-2">
-            <span className="text-3xl">📦</span>
+            <IconPackage className="w-8 h-8 text-cacao-300 mx-auto" />
             <h3 className="text-base font-bold text-cacao-900">No se encontraron lotes</h3>
             <p className="text-xs text-cacao-600 max-w-md mx-auto">
               No hay registros que coincidan con los filtros aplicados.

@@ -2,6 +2,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { catalogProducts } from "../../data/catalogProducts";
 import Navbar from "../../component/Navbar";
 import Footer from "../../component/Footer";
+import { IconPackage, IconGear, IconCheck } from "../../component/Icons";
 import "./FichaCompleta.css";
 
 export default function FichaCompleta() {
@@ -16,6 +17,12 @@ export default function FichaCompleta() {
 
   const { trazabilidad, comercial, estado, lote, name } = producto;
   const isBloqueado = estado === "Bloqueado";
+
+  const ICON_PASO = {
+    package: <IconPackage />,
+    gear: <IconGear />,
+    check: <IconCheck />,
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-cacao-50 text-cacao-900 font-sans">
@@ -68,7 +75,10 @@ export default function FichaCompleta() {
             {trazabilidad.map((paso, i) => (
               <div key={i} className="bg-white p-6 rounded-xl border border-cacao-100 shadow-sm">
                 <div>
-                    <h3 className="font-bold text-cacao-800 mb-2">{paso.paso}</h3>
+                    <h3 className="font-bold text-cacao-800 mb-2 flex items-center gap-2">
+                      {ICON_PASO[paso.icono]}
+                      {paso.paso}
+                    </h3>
                     {paso.productor && (
                       <p className="text-cacao-600 mb-1"><strong>Productor:</strong> {paso.productor}</p>
                     )}
