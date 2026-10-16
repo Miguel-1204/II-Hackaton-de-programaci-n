@@ -141,6 +141,95 @@ Las credenciales incorrectas responden `401`; entrada mal formada, `400`;
 token ausente, inválido o expirado, `401`; y usuario autenticado sin rol
 requerido, `403`.
 
+## Modelo analítico: mermas, costos e inventario
+
+La migración incremental `Backend/drizzle/0001_jazzy_sentinel.sql` agrega
+restricciones de integridad, índices para filtros temporales/administrativos y
+vistas de consulta; no borra ni recrea tablas o datos. La migración inicial
+`0000` permanece intacta.
+
+La estructura ya vincula productor→lote y transformación→lote participante, y
+guarda fecha de transformación, cantidad/unidad por participación, movimientos
+de inventario, costos por transformación, incidencias e historial de estados.
+La nueva migración formaliza `ENTRADA`/`SALIDA`, exige cantidades positivas y
+evita duplicar el mismo lote/rol dentro de una transformación. El seed oficial
+sigue creando entradas iniciales de inventario; una transformación y sus
+movimientos operativos deben registrarse en una transacción del servicio de
+negocio.
+
+Vistas listas para consultas analíticas controladas:
+
+- `analitica_transformacion_merma`: entradas/salidas y merma total por
+  transformación.
+- `analitica_merma_productor`: detalle por productor y transformación,
+  municipio, evaluación, lotes y cantidades de entrada/salida.
+- `analitica_costos_transformacion`: líneas de costo; y
+  `analitica_costos_por_transformacion`: total por transformación y moneda.
+  Los costos permanecen separados de las participaciones para evitar
+  multiplicarlos mediante `JOIN`.
+- `analitica_inventario_lotes`: saldo calculado con `ENTRADA` menos `SALIDA`.
+- `analitica_estado_lotes`: estado actual, último motivo coincidente e
+  incidencias agrupadas por estado.
+- `analitica_incidencias`: dimensiones de incidencias sin descripción ni
+  datos del usuario reportante.
+
+La función SQL `cantidad_a_kg` convierte `kg`, `g` y toneladas en kg; unidades
+desconocidas dan `NULL`. La fórmula es
+`(entrada_kg - salida_kg) / entrada_kg * 100`; el umbral es estrictamente
+mayor que 15 %. No se calcula merma si falta entrada/salida o hay unidades no
+comparables. Para una atribución por productor, cada productor de entrada debe
+tener también salida registrada en lotes vinculados al mismo productor. Si no
+coincide ese conjunto, la vista marca
+`PRODUCTORES_ENTRADA_SALIDA_NO_COINCIDEN` y devuelve métricas nulas; no reparte
+por proporción ni imputa toda la pérdida a un productor. Esta atribución exige
+que el servicio registre correctamente la procedencia de cada lote de salida.
+
+Ejemplos de filtros (aplicados como parámetros de consultas del backend):
+
+```sql
+SELECT *
+FROM analitica_merma_productor
+WHERE fecha_procesamiento >= $1
+  AND fecha_procesamiento < $2
+  AND municipio = $3
+  AND estado_evaluacion = 'EVALUABLE'
+  AND supera_umbral = true;
+
+SELECT municipio, avg(merma_porcentaje) AS merma_promedio
+FROM analitica_merma_productor
+WHERE estado_evaluacion = 'EVALUABLE'
+  AND fecha_procesamiento >= $1
+  AND fecha_procesamiento < $2
+GROUP BY municipio;
+
+SELECT moneda, sum(costo_total) AS total
+FROM analitica_costos_por_transformacion
+WHERE fecha_procesamiento >= $1
+  AND fecha_procesamiento < $2
+GROUP BY moneda;
+```
+
+No se persisten PDFs ni preguntas/respuestas. La generación PDF, los filtros,
+el período consultado y la fecha de emisión corresponden al servicio de
+reportes. El intérprete de lenguaje natural aún debe implementarse como
+intenciones/consultas permitidas y parametrizadas sobre estas vistas; no debe
+ejecutar SQL arbitrario generado por un modelo. Sus endpoints deben requerir
+JWT y `requireRoles('ADMINISTRADOR')`. Las vistas no exponen hashes, tokens,
+correos de usuarios ni descripciones de incidencias, pero la autorización se
+debe imponer en el backend, no con la interfaz.
+
+Para probar las vistas contra PostgreSQL, con Docker y los seeds oficiales
+disponibles, ejecuta:
+
+```powershell
+docker compose exec backend npm run test:analytics
+```
+
+El test realiza verificaciones en una transacción que siempre revierte sus
+datos de prueba. La vista considera incidencias abiertas con estado `ABIERTA`,
+`ABIERTO` o `EN_PROCESO`; las operaciones que cambien el estado de un lote
+deben registrar también el motivo en `historial_estados`.
+
 ## Estrategia para los datos oficiales iniciales
 
 Los registros de demostración se mantienen separados del esquema y de la
@@ -165,4 +254,6 @@ ni lo duplica.
 - `npm run seed:roles`: insertar los roles iniciales.
 - `npm run seed:admin`: crear el administrador inicial y asignarle el rol.
 - `npm run seed:demo`: cargar productores, lotes y movimientos oficiales.
+- `npm run test:analytics`: probar vistas analíticas contra la base activa, con
+  fixtures transaccionales revertidos.
 - `npm test`: ejecutar las pruebas automatizadas del backend.

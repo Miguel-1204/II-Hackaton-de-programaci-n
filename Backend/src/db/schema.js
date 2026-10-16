@@ -1,6 +1,7 @@
 const {
   bigint,
   boolean,
+  check,
   date,
   index,
   jsonb,
@@ -9,6 +10,7 @@ const {
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
   varchar,
 } = require('drizzle-orm/pg-core')
 const { sql } = require('drizzle-orm')
@@ -46,13 +48,19 @@ const usuarioRoles = pgTable(
   (table) => [primaryKey({ columns: [table.usuarioId, table.rolId] })],
 )
 
-const productores = pgTable('productores', {
-  id: id(),
-  nombre: varchar('nombre', { length: 200 }).notNull(),
-  identificacion: varchar('identificacion', { length: 100 }).notNull().unique(),
-  municipio: varchar('municipio', { length: 150 }).notNull(),
-  activo: boolean('activo').notNull().default(true),
-})
+const productores = pgTable(
+  'productores',
+  {
+    id: id(),
+    nombre: varchar('nombre', { length: 200 }).notNull(),
+    identificacion: varchar('identificacion', { length: 100 })
+      .notNull()
+      .unique(),
+    municipio: varchar('municipio', { length: 150 }).notNull(),
+    activo: boolean('activo').notNull().default(true),
+  },
+  (table) => [index('productores_municipio_idx').on(table.municipio)],
+)
 
 const productos = pgTable('productos', {
   id: id(),
@@ -84,19 +92,31 @@ const lotes = pgTable(
     estado: varchar('estado', { length: 50 }).notNull().default('RECIBIDO'),
     creadoEn: createdAt('creado_en'),
   },
-  (table) => [index('lotes_productor_id_idx').on(table.productorId)],
+  (table) => [
+    index('lotes_productor_id_idx').on(table.productorId),
+    index('lotes_estado_idx').on(table.estado),
+    check('lotes_cantidad_positiva_check', sql`${table.cantidadRecibida} > 0`),
+    check(
+      'lotes_unidad_no_vacia_check',
+      sql`length(btrim(${table.unidad})) > 0`,
+    ),
+  ],
 )
 
-const transformaciones = pgTable('transformaciones', {
-  id: id(),
-  codigo: varchar('codigo', { length: 100 }).notNull().unique(),
-  etapa: varchar('etapa', { length: 100 }).notNull(),
-  responsableId: foreignId('responsable_id', usuarios).notNull(),
-  fecha: createdAt('fecha'),
-  observaciones: text('observaciones'),
-  estado: varchar('estado', { length: 50 }).notNull(),
-  claveIdempotencia: varchar('clave_idempotencia', { length: 255 }).unique(),
-})
+const transformaciones = pgTable(
+  'transformaciones',
+  {
+    id: id(),
+    codigo: varchar('codigo', { length: 100 }).notNull().unique(),
+    etapa: varchar('etapa', { length: 100 }).notNull(),
+    responsableId: foreignId('responsable_id', usuarios).notNull(),
+    fecha: createdAt('fecha'),
+    observaciones: text('observaciones'),
+    estado: varchar('estado', { length: 50 }).notNull(),
+    claveIdempotencia: varchar('clave_idempotencia', { length: 255 }).unique(),
+  },
+  (table) => [index('transformaciones_fecha_idx').on(table.fecha)],
+)
 
 const transformacionLotes = pgTable(
   'transformacion_lotes',
@@ -113,10 +133,27 @@ const transformacionLotes = pgTable(
     unidad: varchar('unidad', { length: 50 }).notNull(),
   },
   (table) => [
+    uniqueIndex('transformacion_lotes_transformacion_lote_tipo_uniq').on(
+      table.transformacionId,
+      table.loteId,
+      table.tipoParticipacion,
+    ),
     index('transformacion_lotes_transformacion_id_idx').on(
       table.transformacionId,
     ),
     index('transformacion_lotes_lote_id_idx').on(table.loteId),
+    check(
+      'transformacion_lotes_tipo_participacion_check',
+      sql`${table.tipoParticipacion} in ('ENTRADA', 'SALIDA')`,
+    ),
+    check(
+      'transformacion_lotes_cantidad_positiva_check',
+      sql`${table.cantidad} > 0`,
+    ),
+    check(
+      'transformacion_lotes_unidad_no_vacia_check',
+      sql`length(btrim(${table.unidad})) > 0`,
+    ),
   ],
 )
 
@@ -142,6 +179,18 @@ const movimientosInventario = pgTable(
   (table) => [
     index('movimientos_inventario_lote_id_idx').on(table.loteId),
     index('movimientos_inventario_usuario_id_idx').on(table.usuarioId),
+    index('movimientos_inventario_transformacion_fecha_idx').on(
+      table.transformacionId,
+      table.creadoEn,
+    ),
+    check(
+      'movimientos_inventario_tipo_check',
+      sql`${table.tipoMovimiento} in ('ENTRADA', 'SALIDA')`,
+    ),
+    check(
+      'movimientos_inventario_cantidad_positiva_check',
+      sql`${table.cantidad} > 0`,
+    ),
   ],
 )
 
@@ -158,6 +207,11 @@ const costosTransformacion = pgTable(
   (table) => [
     index('costos_transformacion_transformacion_id_idx').on(
       table.transformacionId,
+    ),
+    check('costos_transformacion_valor_no_negativo_check', sql`${table.valor} >= 0`),
+    check(
+      'costos_transformacion_moneda_no_vacia_check',
+      sql`length(btrim(${table.moneda})) > 0`,
     ),
   ],
 )
@@ -179,6 +233,7 @@ const incidencias = pgTable(
     index('incidencias_lote_id_idx').on(table.loteId),
     index('incidencias_transformacion_id_idx').on(table.transformacionId),
     index('incidencias_usuario_id_idx').on(table.usuarioId),
+    index('incidencias_estado_creada_idx').on(table.estado, table.creadaEn),
   ],
 )
 
@@ -195,6 +250,10 @@ const historialEstados = pgTable(
   },
   (table) => [
     index('historial_estados_lote_id_idx').on(table.loteId),
+    index('historial_estados_lote_fecha_idx').on(
+      table.loteId,
+      table.cambiadoEn,
+    ),
     index('historial_estados_usuario_id_idx').on(table.usuarioId),
   ],
 )

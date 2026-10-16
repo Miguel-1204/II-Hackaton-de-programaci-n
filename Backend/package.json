@@ -12,7 +12,8 @@
     "db:studio": "drizzle-kit studio",
     "seed:roles": "node scripts/db/seed-roles.js",
     "seed:admin": "node scripts/db/seed-admin.js",
-    "seed:demo": "node scripts/db/seed-demo.js"
+    "seed:demo": "node scripts/db/seed-demo.js",
+    "test:analytics": "node scripts/db/analytics.integration.js"
   },
   "keywords": [],
   "author": "",
