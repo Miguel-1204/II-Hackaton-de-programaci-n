@@ -1,31 +1,31 @@
-import {
-  createContext,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { createContext, useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { MODO_DEMO } from "../lib/demo";
 import {
   cerrarSesion,
   iniciarSesion,
+  leerSesionDemo,
   obtenerPerfil,
 } from "../services/authService";
 
-
-// eslint-disable-next-line react-refresh/only-export-components
 export const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [usuario, setUsuario] = useState(null);
+  const [usuario, setUsuario] = useState(null); // { id, nombre, correo, rol, roles }
   const [cargando, setCargando] = useState(true);
 
+  // Restaura la sesión al recargar la página
   useEffect(() => {
+    if (MODO_DEMO) {
+      setUsuario(leerSesionDemo());
+      setCargando(false);
+      return;
+    }
+
     let activo = true;
     supabase.auth.getSession().then(async ({ data }) => {
       try {
-        if (data.session && activo)
-          setUsuario(await obtenerPerfil(data.session.user.id));
+        if (data.session && activo) setUsuario(await obtenerPerfil(data.session.user.email));
       } catch {
         if (activo) setUsuario(null);
       } finally {
@@ -54,7 +54,7 @@ export function AuthProvider({ children }) {
 
   const value = useMemo(
     () => ({ usuario, cargando, login, logout }),
-    [usuario, cargando, login, logout],
+    [usuario, cargando, login, logout]
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

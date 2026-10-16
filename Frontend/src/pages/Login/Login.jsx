@@ -4,7 +4,7 @@ import { useAuth } from "../../hooks/useAuth";
 import Navbar from "../../component/Navbar";
 import "./Login.css";
 
-const rutaPorRol = (rol) => (rol === "administrador" ? "/admin" : "/");
+const rutaPorRol = (rol) => (rol === "administrador" ? "/admin" : "/operador");
 
 export default function Login() {
   const { usuario, login } = useAuth();
