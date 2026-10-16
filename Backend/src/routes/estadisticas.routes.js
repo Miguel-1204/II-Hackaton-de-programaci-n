@@ -3,6 +3,7 @@
  */
 
 const { Router } = require('express')
+const { requireRoles } = require('../middlewares/auth.middleware')
 
 /**
  * Crea el enrutador para estadísticas y vistas analíticas.
@@ -15,12 +16,13 @@ const { Router } = require('express')
 function createEstadisticasRouter({ controller, authenticate }) {
   const router = Router()
 
-  router.get('/resumen', authenticate, controller.getResumenGlobal)
-  router.get('/mermas-productor', authenticate, controller.getMermasPorProductor)
-  router.get('/costos', authenticate, controller.getCostos)
-  router.get('/inventario', authenticate, controller.getInventario)
-  router.get('/estado-lotes', authenticate, controller.getEstadoLotes)
-  router.get('/incidencias', authenticate, controller.getIncidencias)
+  router.use(authenticate, requireRoles('ADMINISTRADOR'))
+  router.get('/resumen', controller.getResumenGlobal)
+  router.get('/mermas-productor', controller.getMermasPorProductor)
+  router.get('/costos', controller.getCostos)
+  router.get('/inventario', controller.getInventario)
+  router.get('/estado-lotes', controller.getEstadoLotes)
+  router.get('/incidencias', controller.getIncidencias)
 
   return router
 }

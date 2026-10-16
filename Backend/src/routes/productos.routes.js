@@ -3,6 +3,7 @@
  */
 
 const { Router } = require('express')
+const { requireRoles } = require('../middlewares/auth.middleware')
 
 /**
  * Crea el enrutador para catálogo de productos, registro de costos y márgenes comerciales.
@@ -15,11 +16,11 @@ const { Router } = require('express')
 function createProductosRouter({ controller, authenticate }) {
   const router = Router()
 
-  router.post('/', authenticate, controller.createProducto)
-  router.get('/', authenticate, controller.listProductos)
-  router.get('/:id', authenticate, controller.getProductoById)
-  router.post('/:id/costos', authenticate, controller.addCosto)
-  router.get('/:id/margenes', authenticate, controller.getMargenes)
+  router.get('/', authenticate, requireRoles('ADMINISTRADOR', 'OPERADOR'), controller.listProductos)
+  router.get('/:id', authenticate, requireRoles('ADMINISTRADOR', 'OPERADOR'), controller.getProductoById)
+  router.post('/', authenticate, requireRoles('ADMINISTRADOR'), controller.createProducto)
+  router.post('/:id/costos', authenticate, requireRoles('ADMINISTRADOR'), controller.addCosto)
+  router.get('/:id/margenes', authenticate, requireRoles('ADMINISTRADOR'), controller.getMargenes)
 
   return router
 }

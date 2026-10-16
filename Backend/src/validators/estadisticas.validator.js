@@ -12,6 +12,7 @@
  *   municipio?: string,
  *   productorId?: number,
  *   superaUmbral?: boolean,
+ *   estadoEvaluacion?: string,
  *   etapa?: string,
  *   estado?: string
  * }, error?: string }}
@@ -20,16 +21,28 @@ function validateEstadisticasQuery(query = {}) {
   const result = {}
 
   if (query.fechaDesde) {
-    const d = new Date(String(query.fechaDesde))
-    if (isNaN(d.getTime())) {
+    const value = query.fechaDesde
+    const d = new Date(`${String(value)}T00:00:00.000Z`)
+    if (
+      typeof value !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+      !Number.isFinite(d.getTime()) ||
+      d.toISOString().slice(0, 10) !== value
+    ) {
       return { error: 'El parámetro "fechaDesde" debe ser una fecha válida (formato YYYY-MM-DD)' }
     }
     result.fechaDesde = d
   }
 
   if (query.fechaHasta) {
-    const d = new Date(String(query.fechaHasta))
-    if (isNaN(d.getTime())) {
+    const value = query.fechaHasta
+    const d = new Date(`${String(value)}T00:00:00.000Z`)
+    if (
+      typeof value !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+      !Number.isFinite(d.getTime()) ||
+      d.toISOString().slice(0, 10) !== value
+    ) {
       return { error: 'El parámetro "fechaHasta" debe ser una fecha válida (formato YYYY-MM-DD)' }
     }
     result.fechaHasta = d
@@ -57,7 +70,25 @@ function validateEstadisticasQuery(query = {}) {
       result.superaUmbral = true
     } else if (str === 'false' || str === '0') {
       result.superaUmbral = false
+    } else {
+      return { error: '"superaUmbral" debe ser true o false' }
     }
+  }
+
+  if (query.estadoEvaluacion !== undefined) {
+    const allowed = [
+      'EVALUABLE',
+      'SIN_ENTRADAS_O_SALIDAS',
+      'UNIDADES_NO_COMPARABLES',
+      'PRODUCTORES_ENTRADA_SALIDA_NO_COINCIDEN',
+    ]
+    const estado = typeof query.estadoEvaluacion === 'string'
+      ? query.estadoEvaluacion.trim().toUpperCase()
+      : ''
+    if (!allowed.includes(estado)) {
+      return { error: '"estadoEvaluacion" no es válido' }
+    }
+    result.estadoEvaluacion = estado
   }
 
   if (typeof query.etapa === 'string' && query.etapa.trim()) {

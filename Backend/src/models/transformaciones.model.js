@@ -9,7 +9,9 @@ const {
   movimientosInventario,
   costosTransformacion,
   incidencias,
+  auditoriaEventos,
 } = require('../db/schema')
+const { lockAndValidateInventory } = require('./lotes.model')
 
 /**
  * Factoría que instancia el modelo de transformaciones con soporte de transacciones e idempotencia.
@@ -81,11 +83,21 @@ function createTransformacionesModel(db) {
         WHERE transformacion_id = ${id}
         LIMIT 1
       `)
+      const [auditRow] = await db
+        .select({ valoresNuevos: auditoriaEventos.valoresNuevos })
+        .from(auditoriaEventos)
+        .where(sql`
+          ${auditoriaEventos.entidad} = 'TRANSFORMACION'
+          AND ${auditoriaEventos.entidadId} = ${String(id)}
+          AND ${auditoriaEventos.operacion} = 'CREACION'
+        `)
+        .limit(1)
 
       return {
         ...trans,
         participaciones: lotesRows,
         costos: costosRows,
+        solicitudInicial: auditRow?.valoresNuevos || null,
         analiticaMerma: mermaRow || null,
       }
     },
@@ -140,7 +152,13 @@ function createTransformacionesModel(db) {
      * @returns {Promise<{ transformacion: Object, merma: Object|null, alertaGenerada: boolean }>}
      */
     async create(data) {
-      return await db.transaction(async (tx) => {
+      try {
+        return await db.transaction(async (tx) => {
+        await lockAndValidateInventory(tx, {
+          consumptions: data.lotesEntrada,
+          lotIds: data.lotesSalida.map(({ loteId }) => loteId),
+        })
+
         // 1. Inserción de la transformación
         const [trans] = await tx
           .insert(transformaciones)
@@ -211,6 +229,34 @@ function createTransformacionesModel(db) {
           }
         }
 
+        await tx.insert(auditoriaEventos).values({
+          usuarioId: data.responsableId,
+          entidad: 'TRANSFORMACION',
+          entidadId: String(trans.id),
+          operacion: 'CREACION',
+          valoresNuevos: {
+            codigo: trans.codigo,
+            etapa: trans.etapa,
+            estado: trans.estado,
+            lotesEntrada: data.lotesEntrada.map(({ loteId, cantidad, unidad }) => ({
+              loteId,
+              cantidad,
+              unidad,
+            })),
+            lotesSalida: data.lotesSalida.map(({ loteId, cantidad, unidad }) => ({
+              loteId,
+              cantidad,
+              unidad,
+            })),
+            costos: (data.costos || []).map(({ concepto, valor, moneda }) => ({
+              concepto,
+              valor,
+              moneda,
+            })),
+          },
+          correlacionId: data.claveIdempotencia || `transformacion:${trans.id}`,
+        })
+
         // 5. Evaluación de merma a través de la vista analítica
         const [merma] = await tx.execute(sql`
           SELECT
@@ -250,7 +296,23 @@ function createTransformacionesModel(db) {
           merma: merma || null,
           alertaGenerada,
         }
-      })
+        })
+      } catch (error) {
+        const databaseError = error.cause || error
+        if (data.claveIdempotencia && databaseError.code === '23505') {
+          const existing = await this.findByClaveIdempotencia(data.claveIdempotencia)
+          if (existing) {
+            const detail = await this.findById(existing.id)
+            return {
+              transformacion: detail,
+              merma: detail?.analiticaMerma || null,
+              alertaGenerada: false,
+              idempotente: true,
+            }
+          }
+        }
+        throw error
+      }
     },
   }
 }

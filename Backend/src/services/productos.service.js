@@ -22,7 +22,7 @@ function createProductosService({ productosModel, transformacionesModel }) {
      * @param {Object} data - Datos del producto comercial.
      * @returns {Promise<Object>} Producto creado.
      */
-    async createProducto(data) {
+    async createProducto(data, usuarioId) {
       const existente = await productosModel.findByCodigo(data.codigo)
       if (existente) {
         const err = new Error(`Ya existe un producto registrado con el código "${data.codigo}"`)
@@ -30,7 +30,16 @@ function createProductosService({ productosModel, transformacionesModel }) {
         throw err
       }
 
-      return await productosModel.create(data)
+      try {
+        return await productosModel.create(data, usuarioId)
+      } catch (error) {
+        if (error.code === '23505' || error.cause?.code === '23505') {
+          const err = new Error('Ya existe un producto con ese código')
+          err.statusCode = 409
+          throw err
+        }
+        throw error
+      }
     },
 
     /**
@@ -58,6 +67,16 @@ function createProductosService({ productosModel, transformacionesModel }) {
       return prod
     },
 
+    async getFichaPublica(codigo) {
+      const ficha = await productosModel.getFichaPublica(codigo)
+      if (!ficha) {
+        const err = new Error('Producto no encontrado')
+        err.statusCode = 404
+        throw err
+      }
+      return ficha
+    },
+
     /**
      * Registra un nuevo costo de procesamiento en una transformación existente.
      *
@@ -65,7 +84,7 @@ function createProductosService({ productosModel, transformacionesModel }) {
      * @param {Object} data - Datos del costo (concepto, valor, moneda, observaciones).
      * @returns {Promise<Object>} Registro del costo creado.
      */
-    async addCostoTransformacion(transformacionId, data) {
+    async addCostoTransformacion(transformacionId, data, usuarioId) {
       if (transformacionesModel) {
         const trans = await transformacionesModel.findById(transformacionId)
         if (!trans) {
@@ -81,6 +100,7 @@ function createProductosService({ productosModel, transformacionesModel }) {
         valor: data.valor,
         moneda: data.moneda,
         observaciones: data.observaciones,
+        usuarioId,
       })
     },
 

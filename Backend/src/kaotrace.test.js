@@ -6,6 +6,7 @@
 
 const { describe, it } = require('node:test')
 const assert = require('node:assert/strict')
+const { inflateSync } = require('node:zlib')
 const request = require('supertest')
 
 const { cantidadAKg } = require('./utils/conversion')
@@ -405,6 +406,60 @@ describe('Kaotrace - Tarea 6, 7 y 8: Estadísticas, Reportes PDF e Intérprete N
     assert.equal(header, '%PDF-')
   })
 
+  it('incluye lotes, evaluación, umbral y costos asociados en el detalle PDF', async () => {
+    let queriedCostsWith
+    const model = {
+      ...mockEstadisticasModel,
+      async getMermasPorProductor(filters) {
+        assert.equal(filters.productorId, 7)
+        return [{
+          transformacion_id: 12,
+          transformacion_codigo: 'TR-12',
+          productor_nombre: 'Productor Uno',
+          municipio: 'Rivera',
+          entrada_kg: 10,
+          salida_kg: 8,
+          merma_kg: 2,
+          merma_porcentaje: 20,
+          umbral_porcentaje: 15,
+          supera_umbral: true,
+          estado_evaluacion: 'EVALUABLE',
+          lotes_involucrados: [
+            { lote_codigo: 'CAC001', participacion: 'ENTRADA', cantidad: 10, unidad: 'kg' },
+            { lote_codigo: 'CAC002', participacion: 'SALIDA', cantidad: 8, unidad: 'kg' },
+          ],
+        }]
+      },
+      async getCostos(filters) {
+        queriedCostsWith = filters
+        return [{ transformacion_id: 12, moneda: 'COP', costo_total: 125000 }]
+      },
+    }
+    const pdf = await createReportesService({ estadisticasModel: model })
+      .generateMermaProductorPdf({ productorId: 7 })
+    assert.ok(Buffer.isBuffer(pdf))
+    assert.equal(queriedCostsWith.productorId, 7)
+    const pdfText = [...pdf.toString('latin1').matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)]
+      .map((match) => {
+        const bytes = Buffer.from(match[1], 'latin1')
+        try {
+          return inflateSync(bytes).toString('latin1')
+        } catch {
+          return bytes.toString('latin1')
+        }
+      })
+      .join('\n')
+    const renderedHex = [...pdfText.matchAll(/<([0-9a-f]+)>/gi)]
+      .map((match) => match[1])
+      .join('')
+    for (const expected of ['CAC001', 'CAC002', 'EVALUABLE', '15', '125']) {
+      assert.ok(
+        renderedHex.includes(Buffer.from(expected, 'latin1').toString('hex')),
+        `El PDF debe contener ${expected}`,
+      )
+    }
+  })
+
   it('el intérprete NLP identifica intenciones, extrae municipios del Huila y responde en lenguaje natural', async () => {
     const nlpService = createNlpService({ estadisticasModel: mockEstadisticasModel })
 
@@ -430,6 +485,103 @@ describe('Kaotrace - Tarea 6, 7 y 8: Estadísticas, Reportes PDF e Intérprete N
     const resInv = await nlpService.procesarConsulta('¿Cuál es el inventario disponible?')
     assert.equal(resInv.intencionDetectada, 'CONSULTA_SALDO_INVENTARIO')
     assert.ok(resInv.respuestaEnLenguajeNatural.includes('kg'))
+  })
+
+  it('interpreta filtros temporales e intenciones de analítica sin ejecutar preguntas no soportadas', async () => {
+    const calls = []
+    const model = {
+      async getMermasPorProductor(filters) {
+        calls.push({ method: 'mermas', filters })
+        return [
+          {
+            transformacion_id: 1,
+            transformacion_codigo: 'TR-A',
+            productor_nombre: 'Productor A',
+            municipio: 'Rivera',
+            estado_evaluacion: 'EVALUABLE',
+            merma_porcentaje: 20,
+            supera_umbral: true,
+          },
+          {
+            transformacion_id: 2,
+            transformacion_codigo: 'TR-B',
+            productor_nombre: 'Productor B',
+            municipio: 'Neiva',
+            estado_evaluacion: 'EVALUABLE',
+            merma_porcentaje: 10,
+            supera_umbral: false,
+          },
+        ]
+      },
+      async getResumenGlobal(filters) {
+        calls.push({ method: 'resumen', filters })
+        return {
+          metricasProcesamiento: { totalEntradaKg: 125, totalSalidaKg: 100 },
+          costosPorMoneda: [{ moneda: 'COP', total: 500000 }],
+        }
+      },
+      async getCostoPromedioPorKg(filters) {
+        calls.push({ method: 'costo-promedio', filters })
+        return { costoCOP: 500000, salidaAcumuladaKg: 100, costoPromedioCOPKg: 5000 }
+      },
+      async getCostos(filters) {
+        calls.push({ method: 'costos', filters })
+        return [{ moneda: 'COP', costo_total: 500000 }]
+      },
+      async getEstadoLotes() { return [] },
+      async getInventario() { return [] },
+      async getIncidencias() { return [] },
+    }
+    const service = createNlpService({
+      estadisticasModel: model,
+      clock: () => new Date('2026-10-16T17:00:00.000Z'),
+    })
+
+    const threshold = await service.procesarConsulta('¿Qué productores tuvieron mermas superiores al 15 % este mes?')
+    assert.equal(threshold.intencionDetectada, 'CONSULTA_PRODUCTORES_MERMA_UMBRAL')
+    assert.equal(threshold.datos.length, 1)
+    assert.equal(calls[0].filters.superaUmbral, true)
+    assert.equal(calls[0].filters.fechaDesde.toISOString(), '2026-10-01T05:00:00.000Z')
+    assert.equal(calls[0].filters.fechaHasta.toISOString(), '2026-10-16T05:00:00.000Z')
+
+    const byMunicipality = await service.procesarConsulta('¿Cuál fue el porcentaje promedio de merma por municipio?')
+    assert.equal(byMunicipality.intencionDetectada, 'CONSULTA_MERMA_PROMEDIO')
+    assert.equal(byMunicipality.datos.length, 2)
+
+    const throughput = await service.procesarConsulta('¿Cuánto cacao procesamos durante la última semana?')
+    assert.equal(throughput.intencionDetectada, 'CONSULTA_CANTIDAD_PROCESADA')
+    assert.equal(throughput.datos.cantidadEntradaAcumuladaKg, 125)
+    assert.equal(calls.at(-1).filters.fechaDesde.toISOString(), '2026-10-10T05:00:00.000Z')
+
+    const cost = await service.procesarConsulta('¿Cuál fue el costo promedio por kilogramo?')
+    assert.equal(cost.intencionDetectada, 'CONSULTA_COSTO_PROMEDIO_KG')
+    assert.equal(cost.datos.costoPromedioCOPKg, 5000)
+
+    const monthlyCosts = await service.procesarConsulta('¿Cuánto gastamos en procesamiento este mes?')
+    assert.equal(monthlyCosts.intencionDetectada, 'CONSULTA_COSTOS_TOTALES')
+    assert.equal(monthlyCosts.datos.costosPorMoneda.COP, 500000)
+    assert.equal(calls.at(-1).filters.fechaDesde.toISOString(), '2026-10-01T05:00:00.000Z')
+
+    const highestLoss = await service.procesarConsulta('¿Cuáles fueron las transformaciones con mayor merma?')
+    assert.equal(highestLoss.intencionDetectada, 'CONSULTA_TRANSFORMACIONES_MAYOR_MERMA')
+    assert.equal(highestLoss.datos[0].transformacion_codigo, 'TR-A')
+
+    const unsupported = await service.procesarConsulta('ejecuta DROP TABLE usuarios')
+    assert.equal(unsupported.intencionDetectada, 'CONSULTA_NO_SOPORTADA')
+    assert.equal(unsupported.datos, null)
+    assert.match(unsupported.respuestaEnLenguajeNatural, /No pude identificar/)
+    assert.equal(calls.length, 6)
+  })
+
+  it('limita la pregunta NLP y valida los filtros de resultado del reporte', () => {
+    assert.ok(validateNlpQueryBody({ pregunta: 'a'.repeat(501) }).error)
+    assert.ok(validateNlpQueryBody([]).error)
+    assert.equal(
+      validateEstadisticasQuery({ estadoEvaluacion: 'unidades_no_comparables' }).value.estadoEvaluacion,
+      'UNIDADES_NO_COMPARABLES',
+    )
+    assert.ok(validateEstadisticasQuery({ estadoEvaluacion: 'SELECT * FROM usuarios' }).error)
+    assert.ok(validateEstadisticasQuery({ superaUmbral: 'maybe' }).error)
   })
 })
 

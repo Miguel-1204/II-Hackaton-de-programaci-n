@@ -3,6 +3,7 @@
  */
 
 const { Router } = require('express')
+const { requireRoles } = require('../middlewares/auth.middleware')
 
 /**
  * Crea el enrutador para la descarga de reportes PDF.
@@ -15,7 +16,18 @@ const { Router } = require('express')
 function createReportesRouter({ controller, authenticate }) {
   const router = Router()
 
-  router.get('/merma-productor/pdf', authenticate, controller.descargarReporteMermaPdf)
+  router.get(
+    '/merma-productor/pdf',
+    authenticate,
+    requireRoles('ADMINISTRADOR'),
+    controller.descargarReporteMermaPdf,
+  )
+  router.get(
+    '/inventario.csv',
+    authenticate,
+    requireRoles('ADMINISTRADOR'),
+    controller.descargarInventarioCsv,
+  )
 
   return router
 }

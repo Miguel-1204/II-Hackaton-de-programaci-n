@@ -87,6 +87,9 @@ function validateUpdateEstadoLoteBody(body) {
   if (typeof estadoNuevo !== 'string' || !estadoNuevo.trim()) {
     return { error: 'El campo "estadoNuevo" es obligatorio (ej. BLOQUEADO, DISPONIBLE, LIBERADO)' }
   }
+  if (!['RECIBIDO', 'PENDIENTE', 'DISPONIBLE', 'LIBERADO', 'BLOQUEADO'].includes(estadoNuevo.trim().toUpperCase())) {
+    return { error: 'estadoNuevo debe ser RECIBIDO, PENDIENTE, DISPONIBLE, LIBERADO o BLOQUEADO' }
+  }
 
   if (typeof motivo !== 'string' || !motivo.trim()) {
     return { error: 'El campo "motivo" es estrictamente obligatorio para registrar el cambio de estado en el historial' }
