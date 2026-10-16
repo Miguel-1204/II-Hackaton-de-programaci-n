@@ -3,6 +3,7 @@ import { ToastProvider } from "./context/ToastContext";
 import Home from "./pages/Home";
 import Login from "./pages/Login/Login";
 import NuestrosCacaos from "./pages/NuestrosCacaos/NuestrosCacaos";
+import Nosotros from "./pages/Nosotros/Nosotros";
 
 export default function App() {
   return (
@@ -11,6 +12,7 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route path="/nuestros-cacaos" element={<NuestrosCacaos />} />
+        <Route path="/nosotros" element={<Nosotros />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </ToastProvider>

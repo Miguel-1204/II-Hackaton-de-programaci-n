@@ -1,0 +1,94 @@
+/* Portada: foto de finca con capa café para mantener el contraste del texto */
+.nosotros-hero {
+  background-color: var(--color-cacao-900);
+  background-image:
+    linear-gradient(rgb(46 26 16 / 0.55), rgb(46 26 16 / 0.8)),
+    url("../../assets/nosotros.png");
+  background-size: cover;
+  background-position: center;
+}
+
+/* Título de la portada: barra dorada debajo */
+.nosotros-titulo::after {
+  content: "";
+  display: block;
+  width: 3rem;
+  height: 3px;
+  margin-top: 0.6rem;
+  border-radius: 2px;
+  background: var(--color-mazorca-500);
+}
+
+/* Subtítulos de sección: marca dorada a la izquierda */
+.nosotros-seccion-titulo {
+  padding-left: 0.75rem;
+  border-left: 4px solid var(--color-mazorca-500);
+}
+
+/* Misión y visión: acento café arriba y leve elevación al pasar el cursor */
+.nosotros-card {
+  border-top: 3px solid var(--color-cacao-700);
+  transition: box-shadow 0.15s ease;
+}
+.nosotros-card:hover {
+  box-shadow: 0 4px 14px rgb(74 42 24 / 0.12);
+}
+
+/* Círculo del ícono */
+.nosotros-icono {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 50%;
+  background: var(--color-cacao-100);
+  color: var(--color-cacao-800);
+}
+
+/* Pasos: número dorado y conector entre tarjetas en pantallas anchas */
+.nosotros-numero {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--color-mazorca-500);
+  color: var(--color-cacao-950);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.nosotros-pasos li {
+  position: relative;
+}
+@media (min-width: 768px) {
+  .nosotros-pasos li:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    top: 2.2rem;
+    right: -1rem;
+    width: 1rem;
+    height: 2px;
+    background: var(--color-mazorca-500);
+  }
+}
+
+/* Paneles café con textura de granos (puntos) */
+.nosotros-origen {
+  background-color: var(--color-cacao-800);
+  background-image: radial-gradient(rgb(255 255 255 / 0.07) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+/* Cierre: franja suave con borde dorado a la izquierda */
+.nosotros-cta {
+  background: var(--color-cacao-100);
+  border-left: 4px solid var(--color-mazorca-500);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nosotros-card {
+    transition: none;
+  }
+}

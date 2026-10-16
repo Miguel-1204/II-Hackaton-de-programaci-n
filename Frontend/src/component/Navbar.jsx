@@ -27,7 +27,7 @@ export default function Navbar() {
 
           {/* Enlaces de navegación (Centro) */}
           <nav className="hidden md:flex space-x-12">
-            <a href="#" className="text-lg font-semibold text-cacao-700 hover:text-cacao-900 transition-colors">
+            <a href="/nosotros" className="text-lg font-semibold text-cacao-700 hover:text-cacao-900 transition-colors">
               Nosotros
             </a>
             <Link
