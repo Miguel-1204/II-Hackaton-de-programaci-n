@@ -1,0 +1,135 @@
+/* ---------- Estructura general ---------- */
+.panel-raiz {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* ---------- Barra lateral ---------- */
+.panel-lateral {
+  display: flex;
+  flex-direction: column;
+  width: 14rem;
+  flex-shrink: 0;
+  background: var(--color-cacao-900);
+  color: var(--color-cacao-50);
+}
+
+/* ---------- Enlaces del menú ---------- */
+.panel-enlace {
+  display: block;
+  padding: 0.55rem 0.75rem;
+  border-left: 3px solid transparent;
+  border-radius: 0.25rem;
+  color: var(--color-cacao-100);
+  font-size: 0.95rem;
+}
+.panel-enlace:hover {
+  background: var(--color-cacao-800);
+}
+.panel-enlace.activo {
+  background: var(--color-cacao-800);
+  border-left-color: var(--color-mazorca-500);
+  color: white;
+  font-weight: 600;
+}
+.panel-enlace:focus-visible,
+.panel-boton-menu:focus-visible,
+.panel-salir:focus-visible {
+  outline: 2px solid var(--color-mazorca-400);
+  outline-offset: 2px;
+}
+
+/* ---------- Usuario y cierre de sesión ---------- */
+.panel-usuario {
+  padding: 1rem;
+  border-top: 1px solid var(--color-cacao-800);
+}
+.panel-salir {
+  margin-top: 0.75rem;
+  width: 100%;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--color-cacao-500);
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--color-cacao-50);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.panel-salir:hover {
+  background: var(--color-cacao-800);
+}
+
+/* ---------- Botones del menú (móvil) ---------- */
+.panel-boton-menu {
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--color-cacao-500);
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--color-cacao-50);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+/* ---------- Computador (768 px o más) ---------- */
+@media (min-width: 768px) {
+  .panel-lateral {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+  }
+  /* Todo lo exclusivo de móvil se oculta aquí */
+  .panel-movil,
+  .panel-fondo,
+  .panel-cerrar {
+    display: none;
+  }
+}
+
+/* ---------- Móvil (menos de 768 px) ---------- */
+@media (max-width: 767px) {
+  .panel-raiz {
+    flex-direction: column;
+  }
+
+  /* La barra se desliza desde la izquierda */
+  .panel-lateral {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition: transform 0.2s ease, visibility 0.2s;
+  }
+  .panel-lateral.abierto {
+    transform: none;
+    visibility: visible;
+  }
+
+  /* Franja superior con el botón «Menú» */
+  .panel-movil {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 1rem;
+    background: var(--color-cacao-900);
+  }
+
+  /* Fondo oscuro detrás del menú abierto */
+  .panel-fondo {
+    position: fixed;
+    inset: 0;
+    z-index: 35;
+    background: rgb(31 16 10 / 0.5);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel-lateral {
+    transition: none;
+  }
+}
