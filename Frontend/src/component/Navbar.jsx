@@ -1,20 +1,21 @@
-import { useToast } from '../context/ToastContext'
+import { useNavigate } from 'react-router-dom'
 import logo from '../assets/logos/Logo.svg'
 
 /**
  * Header / Menú de navegación principal.
  */
 export default function Navbar() {
-  const { showMessage } = useToast()
+  const navigate = useNavigate()
+  const irALogin = () => navigate('/login')
 
   return (
-    <header className="--color-cacao-50 shadow-sm sticky top-0 z-50">
+    <header className="bg-cacao-50 shadow-sm sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-20">
           {/* Logo */}
           <div className="flex-shrink-0 flex items-center">
-            <a href="#" className="block">
-              <div className="w-16 h-16 rounded-full border-2 border-cacao-50 flex items-center justify-center bg-cacao-100 shadow-md overflow-hidden">
+            <a href="/Home" className="block">
+              <div className="w-16 h-16 rounded-full border-2 border-cacao-200 flex items-center justify-center bg-cacao-100 shadow-md overflow-hidden">
                 <img
                   src={logo}
                   alt="Logo Cacao del Huila"
@@ -38,7 +39,7 @@ export default function Navbar() {
           <div className="flex items-center">
             <button
               type="button"
-              onClick={() => showMessage('Iniciando proceso de login...')}
+              onClick={irALogin}
               className="p-2 rounded-full hover:bg-cacao-200/40 text-cacao-800 transition-colors focus:outline-none"
               aria-label="Iniciar sesión"
             >

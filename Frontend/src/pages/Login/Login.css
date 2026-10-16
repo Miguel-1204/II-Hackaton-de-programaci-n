@@ -1,0 +1,28 @@
+.login-fondo {
+  background-color: var(--color-cacao-900);
+  background-image:
+    linear-gradient(rgb(46 26 16 / 0.55), rgb(46 26 16 / 0.55)),
+    url("../../assets/finca-cacao.png");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.login-input:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px white inset;
+  -webkit-text-fill-color: var(--color-cacao-900);
+}
+
+.login-btn {
+  transition:
+    background-color 0.15s ease,
+    transform 0.1s ease;
+}
+.login-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .login-btn {
+    transition: none;
+  }
+}

@@ -1,12 +1,16 @@
-import { ToastProvider } from './context/ToastContext'
-import Home from './pages/Home'
+import { Navigate, Route, Routes } from "react-router-dom";
+import { ToastProvider } from "./context/ToastContext";
+import Home from "./pages/Home";
+import Login from "./pages/Login/Login";
 
-function App() {
+export default function App() {
   return (
     <ToastProvider>
-      <Home />
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </ToastProvider>
-  )
+  );
 }
-
-export default App
