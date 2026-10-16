@@ -60,7 +60,6 @@ export default function ProductsSection() {
                 <ProductCard product={{
                   id: product.id,
                   name: product.name,
-                  price: product.price,
                   image: product.imagenUrl,
                   alt: product.descripcion || product.name,
                   stockDisponibleKg: product.stockDisponibleKg,

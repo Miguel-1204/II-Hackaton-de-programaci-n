@@ -9,7 +9,6 @@ const CONSULTAS_EJEMPLO = [
   'lotes bloqueados',
   'alertas activas',
   'costo promedio por kilogramo',
-  'ventas del mes',
 ]
 
 const etiquetas = {

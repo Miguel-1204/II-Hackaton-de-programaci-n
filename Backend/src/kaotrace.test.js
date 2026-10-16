@@ -468,13 +468,14 @@ describe('Kaotrace - Tarea 6, 7 y 8: Estadísticas, Reportes PDF e Intérprete N
     }
   })
 
-  it('genera PDF para resultados de consultas analíticas y ventas', async () => {
+  it('genera PDF de ventas sin gráficos comerciales', async () => {
     const reportesService = createReportesService({
       estadisticasModel: mockEstadisticasModel,
       nlpService: {
         async procesarConsulta(pregunta) {
           return {
             pregunta,
+            intencionDetectada: 'CONSULTA_VENTAS',
             confianza: 0.94,
             datos: {
               resumen: { totalVentas: 1, cantidadKg: 2, ingresosCop: 20000 },
@@ -501,10 +502,50 @@ describe('Kaotrace - Tarea 6, 7 y 8: Estadísticas, Reportes PDF e Intérprete N
     const renderedHex = [...pdfText.matchAll(/<([0-9a-f]+)>/gi)]
       .map((match) => match[1])
       .join('')
-    for (const expected of ['Visualizacion comparativa por Lote', 'Cantidad (kg)', 'Ingresos (COP)']) {
+    assert.equal(
+      renderedHex.includes(Buffer.from('Visualizacion comparativa por Lote', 'latin1').toString('hex')),
+      false,
+    )
+  })
+
+  it('grafica resultados de mermas aunque PostgreSQL entregue las métricas numéricas como texto', async () => {
+    const reportesService = createReportesService({
+      estadisticasModel: mockEstadisticasModel,
+      nlpService: {
+        async procesarConsulta(pregunta) {
+          return {
+            pregunta,
+            intencionDetectada: 'CONSULTA_MERMA_PROMEDIO',
+            confianza: 0.94,
+            datos: [{
+              transformacion_codigo: 'TR-021',
+              productor_nombre: 'Productor Uno',
+              merma_porcentaje: '18.75',
+              merma_kg: '12.5',
+            }],
+            respuestaEnLenguajeNatural: 'La merma promedio fue 18.75 %.',
+          }
+        },
+      },
+    })
+    const pdf = await reportesService.generateConsultaPdf('merma promedio por productor')
+    const pdfText = [...pdf.toString('latin1').matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)]
+      .map((match) => {
+        const bytes = Buffer.from(match[1], 'latin1')
+        try {
+          return inflateSync(bytes).toString('latin1')
+        } catch {
+          return bytes.toString('latin1')
+        }
+      })
+      .join('\n')
+    const renderedHex = [...pdfText.matchAll(/<([0-9a-f]+)>/gi)]
+      .map((match) => match[1])
+      .join('')
+    for (const expected of ['Visualizacion comparativa por Transformacion', 'Merma (%)']) {
       assert.ok(
         renderedHex.includes(Buffer.from(expected, 'latin1').toString('hex')),
-        `El PDF debe incluir el gráfico con ${expected}`,
+        `El PDF debe graficar la métrica ${expected}`,
       )
     }
   })

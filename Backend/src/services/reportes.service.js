@@ -71,6 +71,19 @@ function metricLabel(key) {
   return REPORT_METRIC_LABELS[key] || key.replace(/([A-Z])/g, ' $1').replaceAll('_', ' ')
 }
 
+function metricValue(value, key) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (
+    typeof value === 'string' &&
+    /^(?:-?\d+\.?\d*|-?\.\d+)$/.test(value.trim()) &&
+    /(kg|merma|porcentaje|costo|cop|ingreso|cantidad|lotes|ventas|total|salida|entrada|promedio)/i.test(key)
+  ) {
+    const number = Number(value)
+    return Number.isFinite(number) ? number : null
+  }
+  return null
+}
+
 function buildComparativeCharts(rows) {
   if (!rows.length) return []
 
@@ -94,7 +107,7 @@ function buildComparativeCharts(rows) {
 
   const metricKeys = Object.keys(rows[0]).filter((key) =>
     !/^(id|.*_id)$/i.test(key) &&
-    rows.some((row) => typeof row[key] === 'number' && Number.isFinite(row[key])),
+    rows.some((row) => metricValue(row[key], key) !== null),
   )
   const groupNames = [...new Set(metricKeys.map(metricGroup))]
     .sort((left, right) => {
@@ -124,7 +137,8 @@ function buildComparativeCharts(rows) {
       const label = String(rawLabel)
       const values = aggregated.get(label) || Object.fromEntries(metrics.map((key) => [key, []]))
       for (const key of metrics) {
-        if (typeof row[key] === 'number' && Number.isFinite(row[key])) values[key].push(row[key])
+        const value = metricValue(row[key], key)
+        if (value !== null) values[key].push(value)
       }
       aggregated.set(label, values)
     }
@@ -559,7 +573,9 @@ function createReportesService({ estadisticasModel, lotesModel, nlpService }) {
       const summary = !Array.isArray(values) && typeof values === 'object'
         ? Object.entries(values).filter(([, value]) => !Array.isArray(value) && (value === null || typeof value !== 'object'))
         : []
-      const charts = buildComparativeCharts(rows)
+      const charts = resultado.intencionDetectada === 'CONSULTA_VENTAS'
+        ? []
+        : buildComparativeCharts(rows)
 
       return new Promise((resolve, reject) => {
         try {
