@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import logo from '../assets/logos/Logo.svg'
 
 /**
@@ -30,9 +30,12 @@ export default function Navbar() {
             <a href="#" className="text-lg font-semibold text-cacao-700 hover:text-cacao-900 transition-colors">
               Nosotros
             </a>
-            <a href="#" className="text-lg font-semibold text-cacao-700 hover:text-cacao-900 transition-colors">
+            <Link
+              to="/nuestros-cacaos"
+              className="text-lg font-semibold text-cacao-700 hover:text-cacao-900 transition-colors"
+            >
               Nuestros Cacaos
-            </a>
+            </Link>
           </nav>
 
           {/* Icono de Usuario / Login (Derecha) */}

@@ -1,0 +1,41 @@
+/* ====== Vista "Nuestros Cacaos" (Catálogo) ====== */
+
+/* Tarjeta de producto */
+.cacaos-card {
+  position: relative;
+  overflow: hidden;
+  min-height: 16rem;
+  border-radius: 1rem; /* rounded-2xl */
+  background-size: cover;
+  background-position: center;
+  border: 1px solid rgba(227, 184, 79, 0.4);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.12),
+    0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.3s ease, transform 0.3s ease;
+  cursor: pointer;
+}
+
+.cacaos-card:hover {
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.25),
+    0 10px 10px -5px rgba(0, 0, 0, 0.15);
+  transform: translateY(-4px);
+}
+
+/* Capa negra con el nombre en blanco que aparece al hacer hover */
+.cacaos-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(31, 16, 10, 0.94); /* casi negro (tono cacao maduro) */
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 1.5rem;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.cacaos-card:hover .cacaos-overlay {
+  opacity: 1;
+}
