@@ -62,7 +62,7 @@ export default function NuestrosCacaos() {
       window.removeEventListener("focus", cargarCatalogo);
       document.removeEventListener("visibilitychange", actualizarAlVolver);
     };
-  }, []);
+  }, [productos.length]);
 
   const productosFiltrados = useMemo(() => productos.filter((producto) => {
     const cumpleNombre = producto.name

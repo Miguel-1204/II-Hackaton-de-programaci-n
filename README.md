@@ -281,6 +281,13 @@ estado redundante a la tabla `productos`.
   opcionales `municipio` y `estado`, consulta PostgreSQL y devuelve CSV UTF-8
   con BOM, encabezados y campos citados; los costos se agrupan por moneda sin
   multiplicarse por joins de lotes/transformaciones.
+- `GET /api/auditoria`: lista eventos persistidos de auditoría (máximo 500),
+  solo administrador.
+- `GET /api/auditoria/movimientos-recientes`: últimos movimientos de inventario
+  con lote, responsable y referencia a transformación o venta, solo administrador.
+- `GET /api/ventas` y `POST /api/ventas`: consulta y registra ventas reales,
+  solo administrador. Una venta registra el movimiento `SALIDA` y su evento de
+  auditoría en la misma transacción; requiere `Idempotency-Key`.
 - `GET /api/productos/:id/margenes`: solo administrador. Calcula el costo por
   kg de salida y el margen únicamente con costos COP y precio de referencia
   configurado por kg; sin cantidad comparable, precio positivo o costo COP,
@@ -292,6 +299,9 @@ añadidos y los cambios de estado; los eventos iniciales de transformación
 incluyen responsable, participaciones y costos de esa operación. La lectura de
 trazabilidad agrupa las participaciones relacionadas en consultas por lote,
 no ejecuta una consulta adicional por transformación.
+Los cambios de estado, ventas, altas de producto y recepciones quedan en la
+bitácora persistente. El panel ya no usa `localStorage` ni movimientos de
+demostración para mostrar auditoría e historial reciente.
 
 Ejemplos de filtros (aplicados como parámetros de consultas del backend):
 
@@ -331,7 +341,7 @@ consultas parametrizadas; no ejecuta SQL arbitrario ni usa una respuesta de un
 modelo para formar SQL. Reconoce, entre otras, mermas superiores al 15 %,
 promedios por municipio, transformaciones con mayor merma, cantidades
 procesadas, costos totales y costo promedio COP/kg, lotes bloqueados e
-incidencias abiertas. Extrae “este mes” y “última semana” (últimos siete días, incluido hoy) usando
+incidencias abiertas y ventas registradas. Extrae “este mes” y “última semana” (últimos siete días, incluido hoy) usando
 los límites del día en hora de Colombia. Una pregunta que no reconoce recibe `CONSULTA_NO_SOPORTADA`, no
 un resumen distinto. La cantidad procesada es la suma de entradas de
 transformaciones —flujo acumulado por etapas, no cacao único—. El costo
@@ -344,6 +354,11 @@ El endpoint NLP requiere JWT y `requireRoles('ADMINISTRADOR')`; la pregunta
 está limitada a 500 caracteres. Las vistas no exponen hashes, tokens, correos
 de usuarios ni descripciones de incidencias; la autorización se impone en el
 backend.
+Las consultas reconocidas pueden exportarse desde el panel a PDF; el informe
+específico de mermas también está disponible directamente desde Consultas.
+`POST /api/reportes/consulta/pdf` recibe la misma pregunta validada que el
+intérprete y exporta la respuesta tabular reconocida; no exporta consultas que
+no produzcan datos.
 
 Ejemplos de uso:
 
@@ -369,6 +384,37 @@ El test realiza verificaciones en una transacción que siempre revierte sus
 datos de prueba. La vista considera incidencias abiertas con estado `ABIERTA`,
 `ABIERTO` o `EN_PROCESO`; las operaciones que cambien el estado de un lote
 deben registrar también el motivo en `historial_estados`.
+
+## Respaldo y restauración de PostgreSQL
+
+Con Docker Desktop activo y los servicios de Compose iniciados, crea un
+respaldo PostgreSQL en formato custom (guardado por defecto en
+`Backend/backups/`, excluido de Git):
+
+```powershell
+.\Backend\scripts\db\backup.ps1
+```
+
+También puedes indicar la ruta del archivo:
+
+```powershell
+.\Backend\scripts\db\backup.ps1 -Destination C:\Backups\kaotrace.dump
+```
+
+La restauración **reemplaza los objetos y datos actuales** de la base
+configurada en Compose. Asegúrate de seleccionar el respaldo correcto y
+mantener una copia del estado actual antes de continuar; el script solicita
+confirmación y se puede cancelar con `Ctrl+C`:
+
+```powershell
+.\Backend\scripts\db\restore.ps1 -BackupFile C:\Backups\kaotrace.dump
+```
+
+`-Force` omite el aviso de confirmación y solo debe usarse en automatizaciones
+controladas. PostgreSQL aplica la restauración en una transacción y revierte
+los cambios si el archivo no se puede restaurar. Estos comandos no programan
+respaldos automáticos; establece una frecuencia externa según los requisitos
+de operación y prueba periódicamente la recuperación en un entorno separado.
 
 ## Estrategia para los datos oficiales iniciales
 

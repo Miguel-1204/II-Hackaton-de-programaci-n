@@ -65,6 +65,23 @@ function createReportesController(reportesService) {
       }
     },
 
+    async descargarConsultaPdf(request, response, next) {
+      const validation = validateNlpQueryBody(request.body)
+      if (validation.error) return response.status(400).json({ error: validation.error })
+      try {
+        const pdfBuffer = await reportesService.generateConsultaPdf(validation.value.pregunta, {
+          solicitante: request.user?.nombre || 'Administrador Kaotrace',
+        })
+        response.setHeader('Content-Type', 'application/pdf')
+        response.setHeader('Content-Disposition', `attachment; filename="consulta-kaotrace-${Date.now()}.pdf"`)
+        response.setHeader('Content-Length', pdfBuffer.length)
+        return response.status(200).send(pdfBuffer)
+      } catch (error) {
+        if (error.status === 400) return response.status(400).json({ error: error.message })
+        return next(error)
+      }
+    },
+
     async descargarInventarioCsv(request, response, next) {
       const municipio = request.query.municipio
       const estado = request.query.estado

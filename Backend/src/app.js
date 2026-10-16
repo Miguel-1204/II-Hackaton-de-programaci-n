@@ -23,6 +23,8 @@ const { createProductosModel } = require('./models/productos.model')
 const { createTrazabilidadModel } = require('./models/trazabilidad.model')
 const { createIncidenciasEstadosModel } = require('./models/incidencias-estados.model')
 const { createEstadisticasModel } = require('./models/estadisticas.model')
+const { createAuditoriaModel } = require('./models/auditoria.model')
+const { createVentasModel } = require('./models/ventas.model')
 
 // Servicios Kaotrace
 const { createTransformacionesService } = require('./services/transformaciones.service')
@@ -34,6 +36,8 @@ const { createIncidenciasEstadosService } = require('./services/incidencias-esta
 const { createEstadisticasService } = require('./services/estadisticas.service')
 const { createReportesService } = require('./services/reportes.service')
 const { createNlpService } = require('./services/nlp.service')
+const { createAuditoriaService } = require('./services/auditoria.service')
+const { createVentasService } = require('./services/ventas.service')
 
 // Controladores Kaotrace
 const { createTransformacionesController } = require('./controllers/transformaciones.controller')
@@ -45,6 +49,8 @@ const { createIncidenciasEstadosController } = require('./controllers/incidencia
 const { createEstadisticasController } = require('./controllers/estadisticas.controller')
 const { createReportesController } = require('./controllers/reportes.controller')
 const { createNlpController } = require('./controllers/nlp.controller')
+const { createAuditoriaController } = require('./controllers/auditoria.controller')
+const { createVentasController } = require('./controllers/ventas.controller')
 
 // Enrutadores Kaotrace
 const { createTransformacionesRouter } = require('./routes/transformaciones.routes')
@@ -57,6 +63,8 @@ const { createIncidenciasEstadosRouter } = require('./routes/incidencias-estados
 const { createEstadisticasRouter } = require('./routes/estadisticas.routes')
 const { createReportesRouter } = require('./routes/reportes.routes')
 const { createNlpRouter } = require('./routes/nlp.routes')
+const { createAuditoriaRouter } = require('./routes/auditoria.routes')
+const { createVentasRouter } = require('./routes/ventas.routes')
 
 /**
  * Factoría para inicializar la aplicación Express con inyección de dependencias.
@@ -84,6 +92,8 @@ function createApp({
   estadisticasService,
   reportesService,
   nlpService,
+  auditoriaService,
+  ventasService,
 } = {}) {
   const app = express()
 
@@ -110,6 +120,8 @@ function createApp({
   const trazabilidadModel = db ? createTrazabilidadModel(db) : null
   const incidenciasEstadosModel = db ? createIncidenciasEstadosModel(db) : null
   const estadisticasModel = db ? createEstadisticasModel(db) : null
+  const auditoriaModel = db ? createAuditoriaModel(db) : null
+  const ventasModel = db ? createVentasModel(db) : null
 
   // 3. Capa de Servicios de Negocio
   const resolvedTransformacionesService =
@@ -152,10 +164,18 @@ function createApp({
       ? createEstadisticasService({ estadisticasModel })
       : null)
 
+  const resolvedAuditoriaService =
+    auditoriaService ||
+    (auditoriaModel ? createAuditoriaService({ auditoriaModel }) : null)
+
+  const resolvedVentasService =
+    ventasService ||
+    (ventasModel ? createVentasService({ ventasModel }) : null)
+
   const resolvedNlpService =
     nlpService ||
     (estadisticasModel
-      ? createNlpService({ estadisticasModel })
+      ? createNlpService({ estadisticasModel, ventasService: resolvedVentasService })
       : null)
 
   const resolvedReportesService =
@@ -197,6 +217,22 @@ function createApp({
 
   // Montaje de rutas de Kaotrace (exigen autenticación)
   if (authenticate) {
+    if (resolvedAuditoriaService) {
+      const auditoriaController = createAuditoriaController(resolvedAuditoriaService)
+      app.use('/api/auditoria', createAuditoriaRouter({
+        controller: auditoriaController,
+        authenticate,
+      }))
+    }
+
+    if (resolvedVentasService) {
+      const ventasController = createVentasController(resolvedVentasService)
+      app.use('/api/ventas', createVentasRouter({
+        controller: ventasController,
+        authenticate,
+      }))
+    }
+
     if (resolvedCatalogoProductoresService) {
       const productoresController = createProductoresController(resolvedCatalogoProductoresService)
       app.use('/api/productores', createProductoresRouter({

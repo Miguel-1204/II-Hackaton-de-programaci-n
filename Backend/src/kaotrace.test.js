@@ -460,6 +460,28 @@ describe('Kaotrace - Tarea 6, 7 y 8: Estadísticas, Reportes PDF e Intérprete N
     }
   })
 
+  it('genera PDF para resultados de consultas analíticas y ventas', async () => {
+    const reportesService = createReportesService({
+      estadisticasModel: mockEstadisticasModel,
+      nlpService: {
+        async procesarConsulta(pregunta) {
+          return {
+            pregunta,
+            confianza: 0.94,
+            datos: {
+              resumen: { totalVentas: 1, cantidadKg: 2, ingresosCop: 20000 },
+              ventas: [{ loteCodigo: 'CAC010', cantidadKg: 2, totalCop: 20000 }],
+            },
+            respuestaEnLenguajeNatural: 'Se registró una venta por 20.000 COP.',
+          }
+        },
+      },
+    })
+    const pdf = await reportesService.generateConsultaPdf('ventas del mes', { solicitante: 'Admin Test' })
+    assert.ok(Buffer.isBuffer(pdf))
+    assert.equal(pdf.subarray(0, 5).toString('utf8'), '%PDF-')
+  })
+
   it('el intérprete NLP identifica intenciones, extrae municipios del Huila y responde en lenguaje natural', async () => {
     const nlpService = createNlpService({ estadisticasModel: mockEstadisticasModel })
 
@@ -535,6 +557,30 @@ describe('Kaotrace - Tarea 6, 7 y 8: Estadísticas, Reportes PDF e Intérprete N
     const service = createNlpService({
       estadisticasModel: model,
       clock: () => new Date('2026-10-16T17:00:00.000Z'),
+    })
+
+    it('consulta ventas registradas en lenguaje natural con filtros de período', async () => {
+      let receivedFilters
+      const nlpService = createNlpService({
+        estadisticasModel: mockEstadisticasModel,
+        ventasService: {
+          async list(filters) {
+            receivedFilters = filters
+            return [{
+              loteCodigo: 'CAC010',
+              cantidadKg: 2,
+              totalCop: 20000,
+            }]
+          },
+        },
+        clock: () => new Date('2026-10-16T15:00:00Z'),
+      })
+      const result = await nlpService.procesarConsulta('ventas del mes')
+      assert.equal(result.intencionDetectada, 'CONSULTA_VENTAS')
+      assert.equal(result.datos.resumen.ingresosCop, 20000)
+      assert.equal(result.datos.resumen.cantidadKg, 2)
+      assert.ok(receivedFilters.fechaDesde instanceof Date)
+      assert.equal(receivedFilters.limit, 500)
     })
 
     const threshold = await service.procesarConsulta('¿Qué productores tuvieron mermas superiores al 15 % este mes?')

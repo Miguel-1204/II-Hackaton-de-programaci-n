@@ -99,7 +99,8 @@ export default function TransformacionNueva() {
   const limpiarError = (id) =>
     setErrores((prev) => {
       if (!prev[id]) return prev
-      const { [id]: _quitado, ...resto } = prev
+      const resto = { ...prev }
+      delete resto[id]
       return resto
     })
 

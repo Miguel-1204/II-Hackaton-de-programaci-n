@@ -5,10 +5,9 @@ import ModalDetalleLote from '../Lotes/ModalDetalleLote'
 import {
   MUNICIPIOS_HUILA,
   obtenerLotes,
-  persistirLotesDemo,
   cambiarEstadoLote
 } from '../../services/lotesService'
-import { registrarAuditoria, descargarCSV } from '../../services/adminService'
+import { descargarCSV } from '../../services/adminService'
 import { IconCheck, IconX, IconSearch, IconEmergency, IconEye, IconLock, IconUnlock, IconAlert, IconDownload } from '../../component/Icons'
 
 const formatKg = (n) => `${Number(n ?? 0).toLocaleString('es-CO')} kg`
@@ -130,7 +129,6 @@ export default function Productos() {
     }
 
     const loteAfectado = loteParaCambioEstado
-    const estadoPrevio = loteAfectado.estado
     const nuevoEstado = nuevoEstadoSeleccionado
     try {
       await cambiarEstadoLote(loteAfectado.id, nuevoEstado, motivoCambio.trim())
@@ -138,42 +136,9 @@ export default function Productos() {
       setErrorMotivo(error.message)
       return
     }
-    const fechaActual = new Date().toISOString().replace('T', ' ').substring(0, 16)
-
-    const nuevaLista = lotes.map((item) => {
-      if (item.id === loteAfectado.id) {
-        const histPrevio = item.historial_estados || []
-        const nuevaEntrada = {
-          id: Date.now(),
-          estado_anterior: estadoPrevio,
-          estado_nuevo: nuevoEstado,
-          fecha: fechaActual,
-          usuario: 'Ing. María Gómez (Admin)',
-          motivo: motivoCambio.trim()
-        }
-        return {
-          ...item,
-          estado: nuevoEstado,
-          historial_estados: [nuevaEntrada, ...histPrevio]
-        }
-      }
-      return item
-    })
-
-    setLotes(nuevaLista)
-    persistirLotesDemo(nuevaLista)
-
-    // Registrar en auditoría global inmutable (RF10)
-    registrarAuditoria({
-      id: Date.now(),
-      fecha: fechaActual,
-      usuario: 'Ing. María Gómez (Admin)',
-      entidad: `Lote ${loteAfectado.codigo}`,
-      operacion: nuevoEstado === 'Bloqueado' ? 'Bloqueo de Lote' : 'Liberación de Lote',
-      valor_anterior: estadoPrevio,
-      valor_nuevo: nuevoEstado,
-      motivo: motivoCambio.trim()
-    })
+    setLotes((items) => items.map((item) =>
+      item.id === loteAfectado.id ? { ...item, estado: nuevoEstado.toUpperCase() } : item
+    ))
 
     mostrarToast(`Lote ${loteAfectado.codigo} cambiado a ${nuevoEstado} exitosamente.`)
     setLoteParaCambioEstado(null)

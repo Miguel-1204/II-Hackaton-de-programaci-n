@@ -1,11 +1,30 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { obtenerAuditoria, descargarCSV } from '../../services/adminService'
 import { IconDownload, IconSearch } from '../../component/Icons'
 
 export default function Auditoria() {
-  const [registros] = useState(() => obtenerAuditoria())
+  const [registros, setRegistros] = useState([])
+  const [cargando, setCargando] = useState(true)
+  const [error, setError] = useState('')
   const [busqueda, setBusqueda] = useState('')
   const [filtroOperacion, setFiltroOperacion] = useState('todas')
+
+  useEffect(() => {
+    let activo = true
+    obtenerAuditoria()
+      .then((eventos) => {
+        if (activo) setRegistros(eventos)
+      })
+      .catch((err) => {
+        if (activo) setError(err.message || 'No se pudo cargar la auditoría.')
+      })
+      .finally(() => {
+        if (activo) setCargando(false)
+      })
+    return () => {
+      activo = false
+    }
+  }, [])
 
   const operacionesDisponibles = useMemo(() => {
     const setOps = new Set(registros.map((r) => r.operacion))
@@ -104,6 +123,8 @@ export default function Auditoria() {
 
       {/* Tabla de Solo Lectura RF10 */}
       <section className="bg-white rounded-2xl border border-cacao-200 shadow-2xs overflow-hidden">
+        {cargando && <p role="status" className="p-6 text-center text-cacao-700">Cargando auditoría…</p>}
+        {error && <p role="alert" className="p-6 text-center text-peligro-600">{error}</p>}
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
@@ -118,13 +139,13 @@ export default function Auditoria() {
               </tr>
             </thead>
             <tbody className="divide-y divide-cacao-100 text-cacao-900">
-              {registrosFiltrados.length === 0 ? (
+              {!cargando && !error && registrosFiltrados.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-cacao-500">
                     No hay registros de auditoría que coincidan con la búsqueda.
                   </td>
                 </tr>
-              ) : (
+              ) : !cargando && !error ? (
                 registrosFiltrados.map((item, idx) => (
                   <tr
                     key={item.id}
@@ -170,7 +191,7 @@ export default function Auditoria() {
                     </td>
                   </tr>
                 ))
-              )}
+              ) : null}
             </tbody>
           </table>
         </div>

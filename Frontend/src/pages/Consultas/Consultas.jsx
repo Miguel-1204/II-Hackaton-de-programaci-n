@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { consultarNlp, descargarBalanceProductosPdf } from '../../services/nlpService'
+import { consultarNlp, descargarConsultaPdf, descargarReporteMermasPdf } from '../../services/nlpService'
 import { IconRobot, IconInfo, IconSearch, IconFormula, IconExclamation } from '../../component/Icons'
 
 const CONSULTAS_EJEMPLO = [
@@ -9,6 +9,7 @@ const CONSULTAS_EJEMPLO = [
   'lotes bloqueados',
   'alertas activas',
   'costo promedio por kilogramo',
+  'ventas del mes',
 ]
 
 const etiquetas = {
@@ -36,6 +37,7 @@ function formatValue(value) {
 function getRows(data) {
   if (Array.isArray(data)) return data
   if (Array.isArray(data?.productos)) return data.productos
+  if (Array.isArray(data?.ventas)) return data.ventas
   if (data?.costosPorMoneda) {
     return Object.entries(data.costosPorMoneda).map(([moneda, total]) => ({ moneda, costo_total: total }))
   }
@@ -115,7 +117,7 @@ export default function Consultas({ abierto = true, alCerrar }) {
     setDescargandoPdf(true)
     setError('')
     try {
-      const blob = await descargarBalanceProductosPdf(resultado.pregunta)
+      const blob = await descargarConsultaPdf(resultado.pregunta)
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
@@ -126,6 +128,27 @@ export default function Consultas({ abierto = true, alCerrar }) {
       window.setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch (err) {
       setError(err.message || 'No fue posible generar el PDF del balance.')
+    } finally {
+      setDescargandoPdf(false)
+    }
+  }
+
+  const handleDescargarMermas = async () => {
+    if (descargandoPdf) return
+    setDescargandoPdf(true)
+    setError('')
+    try {
+      const blob = await descargarReporteMermasPdf()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `reporte-mermas-kaotrace-${new Date().toISOString().slice(0, 10)}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (err) {
+      setError(err.message || 'No fue posible generar el PDF de mermas.')
     } finally {
       setDescargandoPdf(false)
     }
@@ -154,6 +177,9 @@ export default function Consultas({ abierto = true, alCerrar }) {
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-mazorca-400"><IconInfo className="w-4 h-4" /> Consultas disponibles</div>
             <p className="text-sm">Puedes consultar inventario, balance por producto, mermas, costos, lotes bloqueados y alertas activas. La consulta y sus resultados vienen del backend.</p>
             <p className="text-xs text-cacao-200">Ejemplo: <code className="bg-black/30 px-2 py-0.5 rounded text-mazorca-300">balance general de productos</code></p>
+            <button type="button" onClick={handleDescargarMermas} disabled={descargandoPdf} className="mt-2 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-60 text-xs font-semibold">
+              {descargandoPdf ? 'Generando PDF…' : 'Descargar informe de mermas en PDF'}
+            </button>
           </section>
 
           <section className="bg-white p-4 rounded-2xl border border-cacao-200 shadow-2xs space-y-3">
@@ -185,9 +211,9 @@ export default function Consultas({ abierto = true, alCerrar }) {
                 ].map(([title, value]) => <div key={title} className="bg-white rounded-xl border border-cacao-200 p-3"><p className="text-xs text-cacao-500">{title}</p><p className="font-bold text-cacao-950">{value}</p></div>)}
               </div>}
 
-              {balance && <div className="flex justify-end">
-                <button type="button" onClick={handleDescargarBalance} disabled={descargandoPdf || balance.productos?.length === 0} className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white text-sm font-semibold">
-                  {descargandoPdf ? 'Generando PDF…' : 'Descargar balance en PDF'}
+              {resultado.confianza > 0 && resultado.datos && <div className="flex justify-end">
+                <button type="button" onClick={handleDescargarBalance} disabled={descargandoPdf || (balance && balance.productos?.length === 0)} className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white text-sm font-semibold">
+                  {descargandoPdf ? 'Generando PDF…' : 'Descargar consulta en PDF'}
                 </button>
               </div>}
 

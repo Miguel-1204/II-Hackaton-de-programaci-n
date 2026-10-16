@@ -318,6 +318,118 @@ function createReportesService({ estadisticasModel, lotesModel, nlpService }) {
       })
     },
 
+    async generateConsultaPdf(pregunta, metadata = {}) {
+      if (!nlpService) throw new Error('nlpService es requerido para generar el reporte consultado')
+      const resultado = await nlpService.procesarConsulta(pregunta)
+      if (!resultado.datos || resultado.confianza <= 0) {
+        const error = new Error('La consulta no produjo datos exportables')
+        error.status = 400
+        throw error
+      }
+
+      const values = resultado.datos
+      const rows = Array.isArray(values)
+        ? values
+        : Object.values(values).find(Array.isArray) ||
+          (values.costosPorMoneda
+            ? Object.entries(values.costosPorMoneda).map(([moneda, total]) => ({ moneda, total }))
+            : [values])
+      const columns = rows.length
+        ? [...new Set(rows.flatMap((row) =>
+          Object.keys(row).filter((key) => row[key] === null || typeof row[key] !== 'object'),
+        ))]
+        : []
+      const summary = !Array.isArray(values) && typeof values === 'object'
+        ? Object.entries(values).filter(([, value]) => !Array.isArray(value) && (value === null || typeof value !== 'object'))
+        : []
+
+      return new Promise((resolve, reject) => {
+        try {
+          const doc = new PDFDocument({ size: 'LETTER', margin: 40, bufferPages: true })
+          const chunks = []
+          doc.on('data', (chunk) => chunks.push(chunk))
+          doc.on('end', () => resolve(Buffer.concat(chunks)))
+          doc.on('error', reject)
+
+          const left = 40
+          const width = 532
+          doc.rect(left, 40, width, 52).fill('#2c1810')
+          doc.fillColor('#ffffff').fontSize(14).font('Helvetica-Bold')
+            .text('ASOCIACIÓN CACAOTERA DEL HUILA - KAOTRACE', 50, 52)
+          doc.fontSize(9).font('Helvetica').text('Reporte de consulta analítica', 50, 73)
+          doc.fillColor('#2c1810').fontSize(15).font('Helvetica-Bold')
+            .text('RESULTADO DE CONSULTA', left, 108)
+          doc.fillColor('#444444').fontSize(9).font('Helvetica')
+            .text(`Emitido: ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}`)
+            .text(`Solicitado por: ${metadata.solicitante || 'Administrador'}`)
+            .text(`Pregunta: ${pregunta}`, { width })
+          doc.moveDown(0.5)
+          doc.fillColor('#222222').fontSize(10).font('Helvetica-Bold')
+            .text(resultado.respuestaEnLenguajeNatural, { width })
+          let y = doc.y + 16
+
+          if (summary.length) {
+            doc.fillColor('#2c1810').fontSize(10).font('Helvetica-Bold').text('Resumen', left, y)
+            y += 16
+            doc.font('Helvetica').fontSize(8).fillColor('#333333')
+            for (const [key, value] of summary) {
+              if (y > 730) {
+                doc.addPage()
+                y = 45
+              }
+              const text = typeof value === 'string' ? value : JSON.stringify(value)
+              doc.text(`${key}: ${text}`, left + 5, y, { width: width - 10 })
+              y = doc.y + 3
+            }
+            y += 12
+          }
+
+          if (columns.length) {
+            const columnWidth = width / columns.length
+            const drawHeader = () => {
+              doc.rect(left, y, width, 20).fill('#5a3825')
+              doc.fillColor('#ffffff').fontSize(7).font('Helvetica-Bold')
+              columns.forEach((column, index) => {
+                doc.text(column, left + index * columnWidth + 3, y + 6, {
+                  width: columnWidth - 6,
+                  lineBreak: false,
+                  ellipsis: true,
+                })
+              })
+              y += 20
+            }
+            drawHeader()
+            rows.forEach((row, rowIndex) => {
+              if (y > 730) {
+                doc.addPage()
+                y = 45
+                drawHeader()
+              }
+              if (rowIndex % 2 === 0) doc.rect(left, y, width, 18).fill('#faf8f5')
+              doc.fillColor('#222222').font('Helvetica').fontSize(7)
+              columns.forEach((column, index) => {
+                const value = row[column]
+                const text = value === null || value === undefined
+                  ? '-'
+                  : typeof value === 'object'
+                    ? JSON.stringify(value)
+                    : String(value)
+                doc.text(text, left + index * columnWidth + 3, y + 5, {
+                  width: columnWidth - 6,
+                  lineBreak: false,
+                  ellipsis: true,
+                })
+              })
+              y += 18
+            })
+          }
+          doc.end()
+        } catch (error) {
+          reject(error)
+        }
+      })
+    },
+
     async generateInventarioCsv(filters = {}) {
       if (!lotesModel) {
         throw new Error('lotesModel es requerido para exportar inventario')

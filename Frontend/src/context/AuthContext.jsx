@@ -1,4 +1,5 @@
-import { createContext, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AuthContext } from "./auth-context";
 import {
   cerrarSesion,
   haySesion,
@@ -7,20 +8,15 @@ import {
 } from "../services/authService";
 import { clearToken } from "../services/api";
 
-export const AuthContext = createContext(null);
-
 export function AuthProvider({ children }) {
   const [usuario, setUsuario] = useState(null); // { id, nombre, correo, rol, roles }
-  const [cargando, setCargando] = useState(true);
+  const [cargando, setCargando] = useState(() => haySesion());
 
   // Restaura la sesión al recargar la página
   useEffect(() => {
     const onUnauthorized = () => setUsuario(null);
     window.addEventListener("kaotrace:unauthorized", onUnauthorized);
-    if (!haySesion()) {
-      setCargando(false);
-      return () => window.removeEventListener("kaotrace:unauthorized", onUnauthorized);
-    }
+    if (!haySesion()) return () => window.removeEventListener("kaotrace:unauthorized", onUnauthorized);
 
     let activo = true;
     obtenerPerfil().then((perfil) => {

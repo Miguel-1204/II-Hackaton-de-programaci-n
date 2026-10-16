@@ -22,21 +22,18 @@ export default function PanelLayout() {
   const { usuario, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const [abierto, setAbierto] = useState(false)
-
-  // Cierra el menú al cambiar de página
-  useEffect(() => {
-    setAbierto(false)
-  }, [location.pathname])
+  const [menu, setMenu] = useState({ ruta: location.pathname, abierto: false })
+  const abierto = menu.ruta === location.pathname && menu.abierto
+  const cambiarMenu = (value) => setMenu({ ruta: location.pathname, abierto: value })
 
   // Cierra el menú con la tecla Esc
   useEffect(() => {
     const alTeclear = (e) => {
-      if (e.key === 'Escape') setAbierto(false)
+      if (e.key === 'Escape') setMenu({ ruta: location.pathname, abierto: false })
     }
     window.addEventListener('keydown', alTeclear)
     return () => window.removeEventListener('keydown', alTeclear)
-  }, [])
+  }, [location.pathname])
 
   const salir = async () => {
     await logout()
@@ -49,7 +46,7 @@ export default function PanelLayout() {
       <div className="panel-movil">
         <button
           type="button"
-          onClick={() => setAbierto(true)}
+          onClick={() => cambiarMenu(true)}
           aria-expanded={abierto}
           aria-controls="menu-lateral"
           className="panel-boton-menu"
@@ -61,7 +58,7 @@ export default function PanelLayout() {
 
       {/* Fondo oscuro detrás del menú en móvil */}
       {abierto && (
-        <div className="panel-fondo" onClick={() => setAbierto(false)} aria-hidden="true" />
+        <div className="panel-fondo" onClick={() => cambiarMenu(false)} aria-hidden="true" />
       )}
 
       {/* Barra lateral */}
@@ -70,7 +67,7 @@ export default function PanelLayout() {
           <span className="font-display text-lg font-semibold text-cacao-50">Cacao del Huila</span>
           <button
             type="button"
-            onClick={() => setAbierto(false)}
+            onClick={() => cambiarMenu(false)}
             className="panel-boton-menu panel-cerrar"
             aria-label="Cerrar menú"
           >
@@ -85,6 +82,7 @@ export default function PanelLayout() {
                 <NavLink
                   to={m.to}
                   end={m.end}
+                  onClick={() => cambiarMenu(false)}
                   className={({ isActive }) => `panel-enlace ${isActive ? 'activo' : ''}`}
                 >
                   {m.texto}

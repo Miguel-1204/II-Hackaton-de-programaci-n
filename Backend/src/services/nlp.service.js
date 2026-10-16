@@ -29,7 +29,7 @@ function formatPeriod(filters) {
   return `${filters.fechaDesde ? date(filters.fechaDesde) : 'inicio'} a ${filters.fechaHasta ? date(filters.fechaHasta) : 'actualidad'}`
 }
 
-function createNlpService({ estadisticasModel, clock = () => new Date() }) {
+function createNlpService({ estadisticasModel, ventasService, clock = () => new Date() }) {
   if (!estadisticasModel) {
     throw new Error('estadisticasModel es una dependencia obligatoria para el servicio NLP')
   }
@@ -53,7 +53,7 @@ function createNlpService({ estadisticasModel, clock = () => new Date() }) {
         .map((part) => [part.type, Number(part.value)]),
     )
     const end = new Date(Date.UTC(localDate.year, localDate.month - 1, localDate.day, 5))
-    if (/\b(este mes|mes actual|durante el mes)\b/.test(text)) {
+    if (/\b(este mes|mes actual|del mes|durante el mes)\b/.test(text)) {
       return {
         fechaDesde: new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1, 5)),
         fechaHasta: end,
@@ -72,6 +72,7 @@ function createNlpService({ estadisticasModel, clock = () => new Date() }) {
     if (/(balance general|balance de productos|balance por producto|resumen de productos|estado del inventario por producto)/.test(text)) {
       return 'CONSULTA_BALANCE_PRODUCTOS'
     }
+    if (/\bventas?\b|\bvend\w*|\bingresos por ventas?\b/.test(text)) return 'CONSULTA_VENTAS'
     if (/bloquead|retenid|bloqueo/.test(text)) return 'CONSULTA_LOTES_BLOQUEADOS'
     if (/incidencia|alerta|calidad|defecto/.test(text)) return 'CONSULTA_INCIDENCIAS_CALIDAD'
     if (/costo promedio|coste promedio|promedio.*(costo|coste)|costo.*kilogramo|costo.*por kg|costo.*por kilo/.test(text)) {
@@ -143,6 +144,30 @@ function createNlpService({ estadisticasModel, clock = () => new Date() }) {
       let respuestaEnLenguajeNatural
 
       switch (intencion) {
+        case 'CONSULTA_VENTAS': {
+          if (!ventasService) {
+            throw new Error('ventasService es requerido para consultar las ventas')
+          }
+          const ventas = await ventasService.list({
+            ...filters,
+            limit: 500,
+          })
+          const cantidadKg = ventas.reduce((sum, sale) => sum + Number(sale.cantidadKg), 0)
+          const ingresosCop = ventas.reduce((sum, sale) => sum + Number(sale.totalCop), 0)
+          datos = {
+            resumen: {
+              totalVentas: ventas.length,
+              cantidadKg: Number(cantidadKg.toFixed(3)),
+              ingresosCop: Number(ingresosCop.toFixed(2)),
+              periodo: periodo.periodo,
+            },
+            ventas,
+          }
+          respuestaEnLenguajeNatural = ventas.length
+            ? `Se registraron ${ventas.length} venta(s)${municipio ? ` en ${municipio}` : ''} por ${cantidadKg.toLocaleString('es-CO')} kg y ${ingresosCop.toLocaleString('es-CO')} COP durante ${periodo.periodo}. La consulta considera hasta 500 registros.`
+            : `No hay ventas registradas${municipio ? ` en ${municipio}` : ''} durante ${periodo.periodo}.`
+          break
+        }
         case 'CONSULTA_BALANCE_PRODUCTOS': {
           const productos = await estadisticasModel.getBalanceProductos()
           const palabrasIgnoradas = new Set(['balance', 'general', 'producto', 'productos', 'por', 'de', 'del', 'el', 'la', 'los', 'las', 'para', 'inventario', 'resumen', 'consultados', 'consultadas', 'actual', 'actuales', 'stock', 'existencia', 'existencias', 'total', 'consulta'])

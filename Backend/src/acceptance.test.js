@@ -5,6 +5,7 @@ const { createApp } = require('./app')
 const { validateCreateCostoBody, validateCreateProductoBody } = require('./validators/productos.validator')
 const { validateCreateTransformacionBody } = require('./validators/transformaciones.validator')
 const { validateUpdateEstadoLoteBody } = require('./validators/incidencias-estados.validator')
+const { validateCreateVentaBody } = require('./validators/ventas.validator')
 const { createReportesService } = require('./services/reportes.service')
 
 function createAcceptanceApp() {
@@ -49,7 +50,47 @@ function createAcceptanceApp() {
     },
     reportesService: {
       async generateMermaProductorPdf() { return Buffer.from('%PDF-test') },
+      async generateConsultaPdf() { return Buffer.from('%PDF-consulta-test') },
       async generateInventarioCsv() { return '\uFEFFIdentificador,Código\r\n1,CAC001\r\n' },
+    },
+    auditoriaService: {
+      async listEvents() {
+        return [{
+          id: 1,
+          fecha_evento: new Date('2026-10-16T12:00:00Z'),
+          usuario: 'Admin Test',
+          entidad: 'LOTE',
+          entidad_id: '10',
+          operacion: 'CAMBIO_ESTADO',
+          valores_anteriores: { estado: 'PENDIENTE' },
+          valores_nuevos: { estado: 'BLOQUEADO', motivo: 'Control' },
+        }]
+      },
+      async listRecentMovements() {
+        return [{
+          id: 2,
+          creado_en: new Date('2026-10-16T12:00:00Z'),
+          lote: 'CAC010',
+          tipo_movimiento: 'ENTRADA',
+          cantidad: 20,
+          unidad: 'kg',
+          usuario: 'Admin Test',
+        }]
+      },
+    },
+    ventasService: {
+      async create(data) {
+        return { id: 3, ...data, totalCop: data.cantidadKg * data.precioUnitarioCop, idempotente: false }
+      },
+      async list() {
+        return [{
+          id: 3,
+          loteCodigo: 'CAC010',
+          cantidadKg: 2,
+          precioUnitarioCop: 10000,
+          totalCop: 20000,
+        }]
+      },
     },
   })
 }
@@ -168,5 +209,58 @@ describe('Auditoría de cumplimiento Kaotrace', () => {
     assert.ok(validateCreateCostoBody({ concepto: 'Energía', valor: -1, moneda: 'COP' }).error)
     assert.ok(validateCreateCostoBody({ concepto: 'Energía', valor: 'x', moneda: 'COP' }).error)
     assert.equal(validateCreateCostoBody({ concepto: 'Energía', valor: 0, moneda: 'COP' }).error, undefined)
+  })
+
+  it('valida venta en kg, precio y clave de idempotencia', () => {
+    const valid = validateCreateVentaBody({
+      loteId: 10,
+      cantidadKg: 2.125,
+      precioUnitarioCop: 12000.5,
+      cliente: 'Cliente Uno',
+    }, 'sale-key')
+    assert.equal(valid.error, undefined)
+    assert.equal(valid.value.cantidadKg, 2.125)
+    assert.ok(validateCreateVentaBody({ loteId: 10, cantidadKg: 0, precioUnitarioCop: 100 }, 'key').error)
+    assert.ok(validateCreateVentaBody({ loteId: 10, cantidadKg: 1, precioUnitarioCop: -1 }, 'key').error)
+    assert.ok(validateCreateVentaBody({ loteId: 10, cantidadKg: 1, precioUnitarioCop: 1 }, '').error)
+  })
+
+  it('expone auditoría persistida y ventas solo al administrador', async () => {
+    const app = createAcceptanceApp()
+    await request(app).get('/api/auditoria').set('Authorization', 'Bearer operator').expect(403)
+    const audit = await request(app).get('/api/auditoria').set('Authorization', 'Bearer admin').expect(200)
+    assert.equal(audit.body.eventos[0].usuario, 'Admin Test')
+    await request(app).get('/api/auditoria/movimientos-recientes')
+      .set('Authorization', 'Bearer admin').expect(200)
+    await request(app).get('/api/ventas').set('Authorization', 'Bearer operator').expect(403)
+    await request(app).post('/api/ventas')
+      .set('Authorization', 'Bearer admin')
+      .send({ loteId: 10, cantidadKg: 1, precioUnitarioCop: 1000 })
+      .expect(400)
+    const sale = await request(app).post('/api/ventas')
+      .set('Authorization', 'Bearer admin')
+      .set('Idempotency-Key', 'venta-de-prueba')
+      .send({ loteId: 10, cantidadKg: 2, precioUnitarioCop: 10000 })
+      .expect(201)
+    assert.equal(sale.body.venta.totalCop, 20000)
+    const sales = await request(app).get('/api/ventas')
+      .set('Authorization', 'Bearer admin')
+      .expect(200)
+    assert.equal(sales.body.resumen.ingresosCop, 20000)
+  })
+
+  it('genera un PDF para consultas NLP y conserva el acceso administrativo', async () => {
+    const app = createAcceptanceApp()
+    const question = { pregunta: 'ventas del mes' }
+    await request(app).post('/api/reportes/consulta/pdf')
+      .set('Authorization', 'Bearer operator')
+      .send(question)
+      .expect(403)
+    const response = await request(app).post('/api/reportes/consulta/pdf')
+      .set('Authorization', 'Bearer admin')
+      .send(question)
+      .expect(200)
+    assert.match(response.headers['content-type'], /application\/pdf/)
+    assert.match(response.headers['content-disposition'], /attachment/)
   })
 })

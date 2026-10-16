@@ -1,10 +1,6 @@
 import { api, queryString } from './api'
 
 export const MUNICIPIOS_HUILA = ['Rivera', 'Campoalegre', 'Algeciras', 'Gigante', 'Garzón', 'San Agustín', 'Pitalito', 'Palermo', 'Aipe', 'Tarqui', 'Tesalia', 'La Plata']
-// Compatibilidad para vistas que aún no consumen un catálogo remoto.
-export const LOTES_INICIALES = []
-export const persistirLotesDemo = () => {}
-
 export async function obtenerLotes() {
   const result = await api(`/inventario/lotes${queryString({ page: 1, limit: 100 })}`)
   const items = [...result.items]

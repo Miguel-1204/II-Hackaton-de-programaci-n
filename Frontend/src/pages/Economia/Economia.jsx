@@ -1,5 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { obtenerLotes } from '../../services/lotesService'
+import { obtenerVentas, registrarVenta } from '../../services/ventasService'
+import { obtenerCostosPersistidos } from '../../services/economiaService'
 import { IconCacao, IconGear, IconChart, IconFormula, IconAlert, IconCheck } from '../../component/Icons'
 
 const formatCop = (n) => {
@@ -8,20 +10,100 @@ const formatCop = (n) => {
 }
 
 export default function Economia() {
-  // Lote seleccionado para simular
   const [lotes, setLotes] = useState([])
   const [loteIdSeleccionado, setLoteIdSeleccionado] = useState('')
+  const [ventas, setVentas] = useState([])
+  const [costosRegistrados, setCostosRegistrados] = useState([])
+  const [resumenVentas, setResumenVentas] = useState({ totalVentas: 0, cantidadKg: 0, ingresosCop: 0 })
+  const [cargandoVentas, setCargandoVentas] = useState(true)
+  const [guardandoVenta, setGuardandoVenta] = useState(false)
+  const [cantidadVenta, setCantidadVenta] = useState('')
+  const [precioVentaReal, setPrecioVentaReal] = useState('')
+  const [clienteVenta, setClienteVenta] = useState('')
+  const [errorVentas, setErrorVentas] = useState('')
+  const [mensajeVenta, setMensajeVenta] = useState('')
 
   useEffect(() => {
-    obtenerLotes().then((lista) => {
-      setLotes(lista)
-      if (lista.length) setLoteIdSeleccionado(String(lista[0].id))
-    }).catch(() => setLotes([]))
+    let activo = true
+    Promise.allSettled([obtenerLotes(), obtenerVentas({ limit: 100 }), obtenerCostosPersistidos()])
+      .then(([lotesResult, ventasResult, costosResult]) => {
+        if (!activo) return
+        if (lotesResult.status === 'fulfilled') {
+          setLotes(lotesResult.value)
+          if (lotesResult.value.length) setLoteIdSeleccionado(String(lotesResult.value[0].id))
+        }
+        if (ventasResult.status === 'fulfilled') {
+          setVentas(ventasResult.value.ventas || [])
+          setResumenVentas(ventasResult.value.resumen || { totalVentas: 0, cantidadKg: 0, ingresosCop: 0 })
+        }
+        if (costosResult.status === 'fulfilled') setCostosRegistrados(costosResult.value)
+        const failedResult = [lotesResult, ventasResult, costosResult].find((result) => result.status === 'rejected')
+        if (failedResult) setErrorVentas(failedResult.reason?.message || 'No se pudieron cargar todos los datos económicos.')
+      })
+      .finally(() => { if (activo) setCargandoVentas(false) })
+    return () => {
+      activo = false
+    }
   }, [])
 
   const loteSeleccionado = useMemo(() => {
     return lotes.find((l) => l.id === Number(loteIdSeleccionado)) || null
   }, [lotes, loteIdSeleccionado])
+
+  const costosPorMoneda = useMemo(() => costosRegistrados.reduce((totals, item) => {
+    const currency = String(item.moneda || '').toUpperCase()
+    if (currency) totals[currency] = (totals[currency] || 0) + Number(item.costo_total || 0)
+    return totals
+  }, {}), [costosRegistrados])
+
+  const guardarVenta = async (event) => {
+    event.preventDefault()
+    if (!loteSeleccionado || guardandoVenta) return
+    setGuardandoVenta(true)
+    setErrorVentas('')
+    setMensajeVenta('')
+    let ventaRegistrada
+    try {
+      const result = await registrarVenta({
+        loteId: Number(loteSeleccionado.id),
+        cantidadKg: Number(cantidadVenta),
+        precioUnitarioCop: Number(precioVentaReal),
+        cliente: clienteVenta.trim() || undefined,
+      })
+      ventaRegistrada = result.venta
+    } catch (error) {
+      setErrorVentas(error.message || 'No se pudo registrar la venta.')
+      setGuardandoVenta(false)
+      return
+    }
+
+    setCantidadVenta('')
+    setClienteVenta('')
+    setMensajeVenta('Venta registrada; el saldo del lote y la auditoría se actualizaron.')
+    const [lotesResult, ventasResult] = await Promise.allSettled([
+      obtenerLotes(),
+      obtenerVentas({ limit: 100 }),
+    ])
+    const warnings = []
+    if (lotesResult.status === 'fulfilled') setLotes(lotesResult.value)
+    else warnings.push(`No se pudo actualizar el inventario: ${lotesResult.reason?.message || 'error del servidor'}`)
+    if (ventasResult.status === 'fulfilled') {
+      setVentas(ventasResult.value.ventas || [])
+      setResumenVentas(ventasResult.value.resumen || { totalVentas: 0, cantidadKg: 0, ingresosCop: 0 })
+    } else {
+      setVentas((current) => [ventaRegistrada, ...current].slice(0, 100))
+      warnings.push(`No se pudo actualizar el historial: ${ventasResult.reason?.message || 'error del servidor'}`)
+    }
+    if (lotesResult.status === 'fulfilled' && ventasResult.status === 'rejected') {
+      setResumenVentas((current) => ({
+        totalVentas: Math.min(current.totalVentas + 1, 100),
+        cantidadKg: Number((current.cantidadKg + ventaRegistrada.cantidadKg).toFixed(3)),
+        ingresosCop: Number((current.ingresosCop + ventaRegistrada.totalCop).toFixed(2)),
+      }))
+    }
+    if (warnings.length) setErrorVentas(`Venta guardada, pero ${warnings.join(' y ')}.`)
+    setGuardandoVenta(false)
+  }
 
   // Parámetros editables por el jurado (RF05, RF12)
   const [costoTotalEtapa, setCostoTotalEtapa] = useState(1500000) // COP
@@ -85,17 +167,95 @@ export default function Economia() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="font-display text-2xl md:text-3xl font-bold text-cacao-950 tracking-tight">
-              RF05 & RF12: Análisis Económico y Fijación de Precios
+              Ventas y análisis económico
             </h1>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">
-              Simulador en Tiempo Real
+              Ventas persistidas
             </span>
           </div>
           <p className="mt-1 text-sm text-cacao-700">
-            Parámetros editables para evaluación del jurado con cálculo dinámico de costo unitario ($/kg) y márgenes sobre venta.
+            Registra ventas reales contra el inventario disponible. La simulación de costos se mantiene separada y no altera los datos.
           </p>
         </div>
       </header>
+
+      <section className="bg-white p-5 rounded-2xl border border-cacao-200 shadow-2xs space-y-4">
+        <div>
+          <h2 className="text-sm font-bold text-cacao-950 uppercase tracking-wider">Registrar venta</h2>
+          <p className="text-xs text-cacao-600 mt-1">La venta descuenta el saldo del lote en una transacción y queda en auditoría.</p>
+        </div>
+        {errorVentas && <p role="alert" className="p-3 rounded-lg bg-red-50 text-red-800 text-sm">{errorVentas}</p>}
+        {mensajeVenta && <p role="status" className="p-3 rounded-lg bg-emerald-50 text-emerald-800 text-sm">{mensajeVenta}</p>}
+        <form onSubmit={guardarVenta} className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3 items-end">
+          <label className="text-xs font-semibold text-cacao-800">
+            Lote y saldo disponible
+            <select
+              value={loteIdSeleccionado}
+              onChange={(event) => setLoteIdSeleccionado(event.target.value)}
+              required
+              className="mt-1 w-full px-3 py-2 bg-[#FDF8F5] border border-cacao-200 rounded-lg"
+            >
+              {lotes.map((lote) => (
+                <option key={lote.id} value={lote.id} disabled={Number(lote.cantidad_disponible) <= 0 || lote.estado === 'BLOQUEADO'}>
+                  {lote.codigo} — {Number(lote.cantidad_disponible || 0).toLocaleString('es-CO')} kg
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-xs font-semibold text-cacao-800">
+            Cantidad vendida (kg)
+            <input type="number" min="0.001" max={loteSeleccionado?.cantidad_disponible || undefined} step="0.001" value={cantidadVenta} onChange={(event) => setCantidadVenta(event.target.value)} required className="mt-1 w-full px-3 py-2 bg-[#FDF8F5] border border-cacao-200 rounded-lg" />
+          </label>
+          <label className="text-xs font-semibold text-cacao-800">
+            Precio de venta (COP/kg)
+            <input type="number" min="0" step="0.01" value={precioVentaReal} onChange={(event) => setPrecioVentaReal(event.target.value)} required className="mt-1 w-full px-3 py-2 bg-[#FDF8F5] border border-cacao-200 rounded-lg" />
+          </label>
+          <label className="text-xs font-semibold text-cacao-800">
+            Cliente (opcional)
+            <input type="text" maxLength="200" value={clienteVenta} onChange={(event) => setClienteVenta(event.target.value)} className="mt-1 w-full px-3 py-2 bg-[#FDF8F5] border border-cacao-200 rounded-lg" />
+          </label>
+          <button type="submit" disabled={guardandoVenta || !loteSeleccionado || Number(loteSeleccionado.cantidad_disponible) <= 0} className="px-4 py-2.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white text-sm font-semibold">
+            {guardandoVenta ? 'Guardando…' : 'Registrar venta'}
+          </button>
+        </form>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {[
+            ['Ventas registradas', resumenVentas.totalVentas],
+            ['Kg vendidos', `${Number(resumenVentas.cantidadKg).toLocaleString('es-CO')} kg`],
+            ['Ingresos registrados', formatCop(resumenVentas.ingresosCop)],
+          ].map(([label, value]) => (
+            <div key={label} className="p-3 rounded-xl bg-[#FDF8F5] border border-cacao-100">
+              <p className="text-xs text-cacao-600">{label}</p>
+              <p className="font-bold text-cacao-950">{value}</p>
+            </div>
+          ))}
+        </div>
+        <div className="rounded-xl border border-cacao-100 bg-[#FDF8F5] p-3">
+          <p className="text-xs font-semibold text-cacao-700">Costos de transformación persistidos</p>
+          {Object.keys(costosPorMoneda).length
+            ? <div className="mt-2 flex flex-wrap gap-2">{Object.entries(costosPorMoneda).map(([moneda, total]) => <span key={moneda} className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-cacao-900">{moneda}: {Number(total).toLocaleString('es-CO')}</span>)}</div>
+            : <p className="mt-1 text-xs text-cacao-500">No hay costos de transformación registrados.</p>}
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead><tr className="border-b border-cacao-200 text-cacao-600"><th className="py-2 pr-3">Fecha</th><th className="py-2 pr-3">Lote</th><th className="py-2 pr-3">Cliente</th><th className="py-2 pr-3">Kg</th><th className="py-2 pr-3">COP/kg</th><th className="py-2">Total</th></tr></thead>
+            <tbody className="divide-y divide-cacao-100">
+              {ventas.map((venta) => (
+                <tr key={venta.id}>
+                  <td className="py-2 pr-3">{new Date(venta.fechaVenta).toLocaleString('es-CO')}</td>
+                  <td className="py-2 pr-3 font-semibold">{venta.loteCodigo}</td>
+                  <td className="py-2 pr-3">{venta.cliente || 'Sin especificar'}</td>
+                  <td className="py-2 pr-3">{Number(venta.cantidadKg).toLocaleString('es-CO')}</td>
+                  <td className="py-2 pr-3">{formatCop(venta.precioUnitarioCop)}</td>
+                  <td className="py-2 font-semibold">{formatCop(venta.totalCop)}</td>
+                </tr>
+              ))}
+              {!cargandoVentas && ventas.length === 0 && <tr><td colSpan="6" className="py-5 text-center text-cacao-500">Aún no hay ventas registradas.</td></tr>}
+              {cargandoVentas && <tr><td colSpan="6" className="py-5 text-center text-cacao-500">Cargando ventas…</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       {/* Selector de Lote para Precarga Rápida */}
       <section className="bg-white p-4 rounded-2xl border border-cacao-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">

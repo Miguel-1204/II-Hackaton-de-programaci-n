@@ -43,6 +43,13 @@
       "when": 1792166049126,
       "tag": "0005_manteca_imagen_oficial",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792166993705,
+      "tag": "0006_familiar_captain_flint",
+      "breakpoints": true
     }
   ]
 }

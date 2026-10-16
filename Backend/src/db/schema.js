@@ -162,12 +162,35 @@ const transformacionLotes = pgTable(
   ],
 )
 
+const ventas = pgTable(
+  'ventas',
+  {
+    id: id(),
+    loteId: foreignId('lote_id', lotes).notNull(),
+    usuarioId: foreignId('usuario_id', usuarios).notNull(),
+    cliente: varchar('cliente', { length: 200 }),
+    cantidadKg: numeric('cantidad_kg', { precision: 14, scale: 3, mode: 'number' }).notNull(),
+    precioUnitarioCop: numeric('precio_unitario_cop', { precision: 14, scale: 2, mode: 'number' }).notNull(),
+    totalCop: numeric('total_cop', { precision: 16, scale: 2, mode: 'number' }).notNull(),
+    claveIdempotencia: varchar('clave_idempotencia', { length: 180 }).notNull().unique(),
+    fechaVenta: createdAt('fecha_venta'),
+  },
+  (table) => [
+    index('ventas_lote_fecha_idx').on(table.loteId, table.fechaVenta),
+    index('ventas_fecha_idx').on(table.fechaVenta),
+    check('ventas_cantidad_positiva_check', sql`${table.cantidadKg} > 0`),
+    check('ventas_precio_no_negativo_check', sql`${table.precioUnitarioCop} >= 0`),
+    check('ventas_total_no_negativo_check', sql`${table.totalCop} >= 0`),
+  ],
+)
+
 const movimientosInventario = pgTable(
   'movimientos_inventario',
   {
     id: id(),
     loteId: foreignId('lote_id', lotes).notNull(),
     transformacionId: foreignId('transformacion_id', transformaciones),
+    ventaId: foreignId('venta_id', ventas),
     usuarioId: foreignId('usuario_id', usuarios).notNull(),
     tipoMovimiento: varchar('tipo_movimiento', { length: 100 }).notNull(),
     cantidad: numeric('cantidad', {
@@ -293,4 +316,5 @@ module.exports = {
   transformaciones,
   usuarioRoles,
   usuarios,
+  ventas,
 }

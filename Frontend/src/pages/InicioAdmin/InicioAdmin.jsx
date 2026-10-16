@@ -1,33 +1,38 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
-import { obtenerLotes, LOTES_INICIALES } from '../../services/lotesService'
-import { obtenerAlertasPersistidas, MOVIMIENTOS_RECIENTES } from '../../services/adminService'
+import { obtenerLotes } from '../../services/lotesService'
+import { obtenerAlertasPersistidas, obtenerMovimientosRecientes } from '../../services/adminService'
 import { aKg } from '../../utils/merma'
-import { IconAlert, IconRobot, IconInbox, IconGear, IconSparkle, IconMoney, IconPackage, IconClipboard, IconPin } from '../../component/Icons'
+import { IconAlert, IconRobot, IconInbox, IconGear, IconSparkle, IconMoney, IconClipboard, IconPin } from '../../component/Icons'
 
 const formatKg = (n) => `${Number(n ?? 0).toLocaleString('es-CO')} kg`
 const formatCop = (n) => `$ ${Number(n ?? 0).toLocaleString('es-CO')} COP`
 
 export default function InicioAdmin() {
   const { usuario } = useAuth()
-  const [lotes, setLotes] = useState(LOTES_INICIALES)
+  const [lotes, setLotes] = useState([])
   const [alertas, setAlertas] = useState([])
+  const [movimientos, setMovimientos] = useState([])
   const [cargando, setCargando] = useState(true)
   const [errorAlertas, setErrorAlertas] = useState('')
+  const [errorMovimientos, setErrorMovimientos] = useState('')
 
   useEffect(() => {
     let montado = true
     async function cargar() {
       try {
-        const [lotesResult, alertasResult] = await Promise.allSettled([
+        const [lotesResult, alertasResult, movimientosResult] = await Promise.allSettled([
           obtenerLotes(),
           obtenerAlertasPersistidas(),
+          obtenerMovimientosRecientes(),
         ])
         if (!montado) return
-        if (lotesResult.status === 'fulfilled') setLotes(lotesResult.value || LOTES_INICIALES)
+        if (lotesResult.status === 'fulfilled') setLotes(lotesResult.value)
         if (alertasResult.status === 'fulfilled') setAlertas(alertasResult.value)
         else setErrorAlertas('No se pudieron cargar las alertas desde el servidor.')
+        if (movimientosResult.status === 'fulfilled') setMovimientos(movimientosResult.value)
+        else setErrorMovimientos('No se pudieron cargar los movimientos del servidor.')
       } catch {
         if (montado) setErrorAlertas('No se pudieron cargar los indicadores del servidor.')
       } finally {
@@ -231,8 +236,10 @@ export default function InicioAdmin() {
             </Link>
           </div>
 
+          {errorMovimientos && <p role="alert" className="text-sm text-peligro-600">{errorMovimientos}</p>}
+          {!errorMovimientos && !movimientos.length && !cargando && <p className="text-sm text-cacao-500">No hay movimientos registrados.</p>}
           <div className="divide-y divide-cacao-100 text-xs">
-            {MOVIMIENTOS_RECIENTES.map((mov) => (
+            {movimientos.map((mov) => (
               <div key={mov.id} className="py-2.5 flex items-center justify-between gap-2">
                 <div className="min-w-0">
                   <p className="font-semibold text-cacao-900 truncate">
