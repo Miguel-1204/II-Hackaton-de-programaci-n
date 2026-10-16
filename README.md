@@ -257,3 +257,47 @@ ni lo duplica.
 - `npm run test:analytics`: probar vistas analíticas contra la base activa, con
   fixtures transaccionales revertidos.
 - `npm test`: ejecutar las pruebas automatizadas del backend.
+
+
+## Kaotrace — Procesamiento y Analítica Agroindustrial del Cacao
+
+Hemos implementado de forma modular, robusta y con documentación estricta **JSDoc** las **9 tareas de Procesamiento y Analítica** asignadas para el MVP de **Kaotrace**. El sistema se encuentra 100% probado (30 pruebas automatizadas pasando con éxito) y listo para despliegue en contenedores **Docker**.
+
+---
+
+### 1. Cambios y Módulos Implementados
+
+#### Arquitectura Modular Desarrollada en Express:
+1. **Modelos (`src/models/`):**
+   - `lotes.model.js`: Consulta de lotes y saldos en kg desde `analitica_inventario_lotes`.
+   - `transformaciones.model.js`: Registro transaccional en `transformaciones`, `transformacion_lotes` y `movimientos_inventario`. Manejo de idempotencia vía `clave_idempotencia UK`. Monitoreo de merma vía `analitica_transformacion_merma` e inserción automática de incidencias si la merma supera el 15 %.
+   - `productos.model.js`: Catálogo comercial, registro en `costos_transformacion` y cálculo de costos unitarios y márgenes de ganancia.
+   - `trazabilidad.model.js`: Reconstrucción bidireccional (aguas arriba hasta campesinos y municipios; aguas abajo hasta derivados y alertas).
+   - `incidencias-estados.model.js`: Registro de incidencias y cambios de estado con persistencia obligatoria en `historial_estados` y `auditoria_eventos`.
+   - `estadisticas.model.js`: Consultas SQL parametrizadas sobre las vistas analíticas de PostgreSQL.
+
+2. **Servicios (`src/services/`):**
+   - `transformaciones.service.js`: Valida existencias, impide procesar lotes `BLOQUEADO`, verifica saldo disponible y previene duplicaciones por idempotencia.
+   - `productos.service.js`: Catálogo comercial, costeo de transformaciones y cálculo de margen neto y porcentual.
+   - `trazabilidad.service.js`: Recuperación del grafo de procedencia y trazabilidad.
+   - `incidencias-estados.service.js`: Control de calidad; restringe cambios de estado exclusivamente al rol `ADMINISTRADOR` y exige motivo no vacío.
+   - `estadisticas.service.js`: KPIs consolidados del Huila.
+   - `reportes.service.js`: Generación de informes PDF descargables vía `pdfkit`.
+   - `nlp.service.js`: Intérprete semántico en lenguaje natural de solo lectura (sin inyección SQL), con detección de intenciones y municipios del Huila.
+
+3. **Validadores (`src/validators/`):**
+   - Validaciones rigurosas para esquemas JSON, tipos numéricos positivos y motivos obligatorios.
+
+4. **Controladores y Rutas (`src/controllers/`, `src/routes/`):**
+   - Endpoints RESTful conectados en `app.js` bajo el prefijo `/api/`.
+
+#### Conexión con Supabase / PostgreSQL:
+* **Drizzle ORM y postgres.js:** El backend se conecta a PostgreSQL mediante `src/config/db.js` usando la variable `DATABASE_URL`. Compatible con Supabase (conexión directa o Connection Pooler).
+* **Factoría del SDK de Supabase:** En `src/config/supabase.js` se expone la factoría `createSupabaseClient()` para inicializar `@supabase/supabase-js`.
+* **Esquema intacto y vistas respetadas:** Se mantuvieron intactas las vistas analíticas (`analitica_transformacion_merma`, `analitica_merma_productor`, etc.) y la función SQL `cantidad_a_kg` creadas en `0001_jazzy_sentinel.sql`.
+
+---
+
+### 2. Aseguramiento de Calidad y Pruebas
+* **Limpieza de Código Legacy:** Eliminación de stubs y archivos obsoletos (`items.controller.js`, `item.model.js`, etc.) para mantener una arquitectura limpia.
+* **Suite de Pruebas Automatizadas:** 30 pruebas unitarias y de integración pasando al 100% (`npm test`), cubriendo autenticación, hashing scrypt, RBAC, Supertest, buffers PDF e intérprete NLP.
