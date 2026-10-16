@@ -106,7 +106,7 @@ function createProductosModel(db) {
      * @param {number} transformacionId - ID de la transformación.
      * @returns {Promise<Object>} Resumen de costos, lote de salida, costo unitario y márgenes.
      */
-    async calculateMargenes(transformacionId) {
+async calculateMargenes(transformacionId) {
       // 1. Obtener totales de costo por moneda desde la vista
       const costosTotal = await db.execute(sql`
         SELECT
@@ -117,26 +117,25 @@ function createProductosModel(db) {
         WHERE transformacion_id = ${transformacionId}
       `)
 
-      // 2. Obtener participaciones de SALIDA con datos de lote y producto asociado
-      const salidas = await db
-        .select({
-          participacionId: transformacionLotes.id,
-          loteId: transformacionLotes.loteId,
-          cantidad: transformacionLotes.cantidad,
-          unidad: transformacionLotes.unidad,
-          loteCodigo: lotes.codigo,
-          productoId: lotes.productoId,
-          productoCodigo: productos.codigo,
-          productoNombre: productos.nombre,
-          precioReferencia: productos.precioReferencia,
-          unidadComercial: productos.unidadComercial,
-        })
-        .from(transformacionLotes)
-        .join(lotes, eq(lotes.id, transformacionLotes.loteId))
-        .leftJoin(productos, eq(productos.id, lotes.productoId))
-        .where(
-          sql`${transformacionLotes.transformacionId} = ${transformacionId} AND ${transformacionLotes.tipoParticipacion} = 'SALIDA'`,
-        )
+      // 2. Obtener participaciones de SALIDA usando SQL seguro para evitar errores de sintaxis en ORM
+      const salidas = await db.execute(sql`
+        SELECT 
+          tl.id AS "participacionId",
+          tl.lote_id AS "loteId",
+          tl.cantidad,
+          tl.unidad,
+          l.codigo AS "loteCodigo",
+          l.producto_id AS "productoId",
+          p.codigo AS "productoCodigo",
+          p.nombre AS "productoNombre",
+          p.precio_referencia AS "precioReferencia",
+          p.unidad_comercial AS "unidadComercial"
+        FROM transformacion_lotes tl
+        JOIN lotes l ON l.id = tl.lote_id
+        LEFT JOIN productos p ON p.id = l.producto_id
+        WHERE tl.transformacion_id = ${transformacionId} 
+          AND tl.tipo_participacion = 'SALIDA'
+      `)
 
       // Total de salida en kg si aplica
       const [mermaRow] = await db.execute(sql`
@@ -152,7 +151,6 @@ function createProductosModel(db) {
         const cantidadSalida = Number(item.cantidad)
         const precioRef = item.precioReferencia !== null ? Number(item.precioReferencia) : null
 
-        // Prorrateo básico si hay salida (costo_total / totalSalidaKg o cantidadSalida)
         let costoUnitario = null
         if (cantidadSalida > 0 && costoTotalMonto >= 0) {
           costoUnitario = costoTotalMonto / (totalSalidaKg && totalSalidaKg > 0 ? totalSalidaKg : cantidadSalida)
